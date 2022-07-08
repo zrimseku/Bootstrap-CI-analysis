@@ -1,5 +1,7 @@
 import numpy as np
-from scipy.stats import norm, bootstrap
+from scipy.stats import norm
+from scipy.stats import bootstrap as boot_sci
+from arch import bootstrap as boot_arch
 
 
 class Bootstrap:
@@ -28,9 +30,14 @@ class Bootstrap:
 
     def evaluate_statistic(self):
         """Evaluates statistic on bootstrapped datasets"""
+        # do we want to call statistic in a vectorized way, to avoid the for loop?
         self.statistic_values = np.zeros(self.b)
         for i in range(self.b):
             self.statistic_values[i] = self.statistic(self.original_sample[self.bootstrap_indices[i, :]])
+
+    # TODO? For nested we can input sample and indices into evaluate_statistic, to have all evaluations in the same
+    #  place? Put "nested" parameter into sampling, to return indices instead of saving them (should we just always
+    #  return them?) Polepšaj kodo uglavnem
 
     def ci(self, coverage: float, side: str = 'two', method: str = 'bca', nr_bootstrap_samples: int = None,
            seed: int = None, sampling: str = 'nonparametric') -> np.array:
@@ -89,8 +96,8 @@ class Bootstrap:
         elif method == 'studentized':   # bootstrap-t, add more possible names for all that have multiple names?
             standard_errors = self.studentized_error_calculation()
             t_samples = (self.statistic_values - self.original_statistic_value) / standard_errors
-
-            return
+            se = np.std(self.statistic_values)      # tole naj bi bil se na original podatkih, kako to dobiš avtomatsko?
+            return self.original_statistic_value - np.quantile(t_samples, quantile) * se
 
         elif method == 'tilted':
             return
@@ -100,10 +107,23 @@ class Bootstrap:
             assert ValueError(f'This method is not supported, choose between {implemented_methods}.')
 
     def studentized_error_calculation(self):
-        # a bi blo bols dat to funkcijo ven, je okej da je nested, kaj so druge opcije?
-        return self.statistic_values        # TODO, tale za pravo obliko
+        # a bi blo bols dat to funkcijo ven
+        # je okej da je nested, kaj so druge opcije? lahko delta method
+        # pomojem bi blo kul nastimat, da uporabnik sam poda, ce noce nested delat...
+
+        # NESTED BOOTSTRAP:
+        standard_errors = np.zeros(self.b)
+        for i in range(self.b):
+            new_indices = np.random.choice(self.bootstrap_indices[i, :], size=[self.b, self.n])
+            new_values = np.zeros(self.b)
+            for j in range(self.b):
+                new_values[j] = self.statistic(self.original_sample[new_indices[j, :]])
+            standard_errors[i] = np.std(new_values)
+
+        return standard_errors
 
     def calibration(self):
         # a bo to posebej, a dodamo v ci, a sploh?
         pass
+
 
