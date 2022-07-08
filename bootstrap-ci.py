@@ -1,7 +1,8 @@
 import numpy as np
+import scipy.stats
 from scipy.stats import norm
 from scipy.stats import bootstrap as boot_sci
-from arch import bootstrap as boot_arch
+from arch.bootstrap import IIDBootstrap as boot_arch
 
 
 class Bootstrap:
@@ -82,6 +83,7 @@ class Bootstrap:
 
         elif method[:2] == 'bc':
             bias = np.mean(self.statistic_values < self.original_statistic_value)
+            # print('bias', bias)
             a = 0   # for BC method
 
             if method == 'bca':
@@ -89,15 +91,23 @@ class Bootstrap:
                 jack_dot = np.mean(jackknife_values)
                 u = (self.n - 1) * (jack_dot - np.array(jackknife_values))
                 a = np.sum(u**3) / (6 * np.sum(u**2) ** 1.5)
+                # print('a', a)
 
-            corrected = norm.cdf(norm.ppf(bias) + (norm.ppf(bias) + quantile) / (1 - a * (norm.ppf(bias) + quantile)))
+            z_alpha = norm.ppf(quantile)
+            corrected = norm.cdf(norm.ppf(bias) + (norm.ppf(bias) + z_alpha) / (1 - a * (norm.ppf(bias) + z_alpha)))
+            # print('quant', z_alpha)
+            # print('norm ppf bias', norm.ppf(bias))
+            # print('corrected', corrected)
             return np.quantile(self.statistic_values, corrected)
 
         elif method == 'studentized':   # bootstrap-t, add more possible names for all that have multiple names?
             standard_errors = self.studentized_error_calculation()
             t_samples = (self.statistic_values - self.original_statistic_value) / standard_errors
             se = np.std(self.statistic_values)      # tole naj bi bil se na original podatkih, kako to dobiš avtomatsko?
-            return self.original_statistic_value - np.quantile(t_samples, quantile) * se
+            print(self.original_statistic_value)
+            print(np.quantile(t_samples, quantile) * se)
+            print((self.original_statistic_value + np.quantile(t_samples, quantile) * se))
+            return (self.original_statistic_value - np.quantile(t_samples, quantile) * se)[::-1]
 
         elif method == 'tilted':
             return
@@ -127,3 +137,42 @@ class Bootstrap:
         pass
 
 
+if __name__ == '__main__':
+    # data generation
+    np.random.seed(0)
+    # data = np.random.normal(5, 10, 100)
+    # print(data)
+    data = np.random.gamma(2, 3, 100)
+    print(scipy.stats.skew(data))
+
+    # for method in ['basic', 'percentile', 'bca', 'bc', 'studentized', 'standard']:
+    for method in ['percentile', 'studentized']:
+        print(method)
+        # other settings
+        statistic = np.mean
+        # method = "percentile"
+        B = 1000
+        confidence = 0.9
+
+        print(f'Original data statistic value: {statistic(data)}')
+
+        # initializations
+        b_arch = boot_arch(data)
+        if method == 'standard':
+            ma = 'norm'
+        else:
+            ma = method
+        ci_arch = b_arch.conf_int(statistic, B, method=ma, size=confidence)
+        print(f'Arch: {ci_arch[:,0]}')
+
+        if method in ['basic', 'percentile', 'bca']:
+            b_sci = boot_sci((data,), statistic, n_resamples=B, confidence_level=confidence, method=method,
+                             vectorized=False)
+            ci_sci = b_sci.confidence_interval
+            print(f'Scipy: {[ci_sci.low, ci_sci.high]}')
+
+        our = Bootstrap(data, statistic)
+        our_ci = our.ci(coverage=confidence, nr_bootstrap_samples=B, method=method)
+        print(f'Our: {our_ci}')
+
+        print('_____________________________________________________________________')
