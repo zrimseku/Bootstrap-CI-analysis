@@ -3,6 +3,7 @@ import scipy.stats
 from scipy.stats import norm
 from scipy.stats import bootstrap as boot_sci
 from arch.bootstrap import IIDBootstrap as boot_arch
+import matplotlib.pyplot as plt
 
 
 class Bootstrap:
@@ -15,6 +16,8 @@ class Bootstrap:
         self.b = 0
         self.bootstrap_indices = np.empty(0)
         self.statistic_values = np.empty(0)
+        # sampling method?
+        # CI method?
 
     def sample(self, nr_bootstrap_samples: int = 1000, seed: int = None, sampling: str = 'nonparametric'):
         """
@@ -23,25 +26,40 @@ class Bootstrap:
         :param seed:
         :param sampling:
         """
-        # TODO: include semi-parametric and parametric sampling
+        # TODO: include semi-parametric and parametric sampling -> in evaluate?
         if seed is not None:
             np.random.seed(seed)
         self.b = nr_bootstrap_samples
         self.bootstrap_indices = np.random.choice(range(self.n), size=[nr_bootstrap_samples, self.n])
 
-    def evaluate_statistic(self):
+    def evaluate_statistic(self, sampling: str = 'nonparametric',
+                           sampling_args: dict = {'kernel': 'uniform', 'width': 1}):
         """Evaluates statistic on bootstrapped datasets"""
-        # do we want to call statistic in a vectorized way, to avoid the for loop?
         self.statistic_values = np.zeros(self.b)
+        statistic_input = self.original_sample[self.bootstrap_indices]
+        if sampling == 'semiparametric':
+            if sampling_args['kernel'] == 'uniform':
+                noise = np.random.uniform(-sampling_args['width']/2, sampling_args['width']/2, statistic_input.shape)
+            elif sampling_args['kernel'] == 'uniform':
+                noise = np.random.normal(0, sampling_args['width'], statistic_input.shape)
+            else:
+                noise = np.zeros(statistic_input.shape)
+                print(f"Unknown kernel: {sampling_args['kernel']}")
+            statistic_input = self.original_sample[self.bootstrap_indices] + noise
+
+        # TODO: parametric sampling
+
         for i in range(self.b):
-            self.statistic_values[i] = self.statistic(self.original_sample[self.bootstrap_indices[i, :]])
+            # do we want to call statistic in a vectorized way, to avoid the for loop?
+            self.statistic_values[i] = self.statistic(statistic_input[i, :])
 
     # TODO? For nested we can input sample and indices into evaluate_statistic, to have all evaluations in the same
     #  place? Put "nested" parameter into sampling, to return indices instead of saving them (should we just always
     #  return them?) Polepšaj kodo uglavnem
 
     def ci(self, coverage: float, side: str = 'two', method: str = 'bca', nr_bootstrap_samples: int = None,
-           seed: int = None, sampling: str = 'nonparametric') -> np.array:
+           seed: int = None, sampling: str = 'nonparametric',
+           sampling_args: dict = {'kernel': 'uniform', 'width': 1}) -> np.array:
         """
         Returns confidence intervals.
         :param coverage: TODO
@@ -50,6 +68,7 @@ class Bootstrap:
         :param nr_bootstrap_samples:
         :param seed:
         :param sampling:
+        :param sampling_args:
         :return:
         """
 
@@ -104,22 +123,26 @@ class Bootstrap:
             standard_errors = self.studentized_error_calculation()
             t_samples = (self.statistic_values - self.original_statistic_value) / standard_errors
             se = np.std(self.statistic_values)      # tole naj bi bil se na original podatkih, kako to dobiš avtomatsko?
-            print(self.original_statistic_value)
-            print(np.quantile(t_samples, quantile) * se)
-            print((self.original_statistic_value + np.quantile(t_samples, quantile) * se))
+            # print(self.original_statistic_value)
+            # print(np.quantile(t_samples, quantile) * se)
+            # print((self.original_statistic_value + np.quantile(t_samples, quantile) * se)) boljši rezultati, ni isto
             return (self.original_statistic_value - np.quantile(t_samples, quantile) * se)[::-1]
 
-        elif method == 'tilted':
-            return
+        elif method == 'smoothed':
+            # smoothed = semiparametric
+            self.evaluate_statistic(sampling='semiparametric', sampling_args=sampling_args)
+            return np.quantile(self.statistic_values, quantile)
 
         else:
-            implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'tilted']
+            implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed']
             assert ValueError(f'This method is not supported, choose between {implemented_methods}.')
 
     def studentized_error_calculation(self):
-        # a bi blo bols dat to funkcijo ven
-        # je okej da je nested, kaj so druge opcije? lahko delta method
-        # pomojem bi blo kul nastimat, da uporabnik sam poda, ce noce nested delat...
+        # TODO
+        #  a bi blo bols dat to funkcijo ven
+        #  a je okej da je nested, kaj so druge opcije? lahko delta method
+        #  pomojem bi blo kul nastimat, da uporabnik sam poda, ce noce nested delat...
+        #  paralelizacija
 
         # NESTED BOOTSTRAP:
         standard_errors = np.zeros(self.b)
@@ -136,43 +159,69 @@ class Bootstrap:
         # a bo to posebej, a dodamo v ci, a sploh?
         pass
 
+    def draw_bootstrap_distribution(self):
+        """Draws distribution of statistic values on all bootstrap samples."""
+        plt.hist(self.statistic_values, bins=30)
+        plt.show()
 
-if __name__ == '__main__':
-    # data generation
-    np.random.seed(0)
-    # data = np.random.normal(5, 10, 100)
-    # print(data)
-    data = np.random.gamma(2, 3, 100)
-    print(scipy.stats.skew(data))
 
-    # for method in ['basic', 'percentile', 'bca', 'bc', 'studentized', 'standard']:
-    for method in ['percentile', 'studentized']:
+def compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha):
+    for method in methods:
         print(method)
-        # other settings
-        statistic = np.mean
-        # method = "percentile"
-        B = 1000
-        confidence = 0.9
-
-        print(f'Original data statistic value: {statistic(data)}')
 
         # initializations
         b_arch = boot_arch(data)
+        sampling_method = 'nonparametric'
         if method == 'standard':
             ma = 'norm'
+        elif method == 'smoothed':
+            ma = 'percentile'
         else:
             ma = method
-        ci_arch = b_arch.conf_int(statistic, B, method=ma, size=confidence)
+        ci_arch = b_arch.conf_int(statistic, B, method=ma, size=alpha)
         print(f'Arch: {ci_arch[:,0]}')
 
         if method in ['basic', 'percentile', 'bca']:
-            b_sci = boot_sci((data,), statistic, n_resamples=B, confidence_level=confidence, method=method,
+            # only these are implemented in scipy
+            b_sci = boot_sci((data,), statistic, n_resamples=B, confidence_level=alpha, method=method,
                              vectorized=False)
             ci_sci = b_sci.confidence_interval
             print(f'Scipy: {[ci_sci.low, ci_sci.high]}')
 
         our = Bootstrap(data, statistic)
-        our_ci = our.ci(coverage=confidence, nr_bootstrap_samples=B, method=method)
+        our_ci = our.ci(coverage=alpha, nr_bootstrap_samples=B, method=method)  # , seed=0)
+        our.draw_bootstrap_distribution()
         print(f'Our: {our_ci}')
 
         print('_____________________________________________________________________')
+
+
+if __name__ == '__main__':
+    # data generation
+    np.random.seed(0)
+    n = 100
+    # NORMAL
+    # data = np.random.normal(5, 10, 100)
+    # GAMMA
+    data = np.random.gamma(shape=2, scale=3, size=n)
+
+    # other settings
+    statistic = np.median
+    B = 1000
+    alpha = 0.9
+    print(f'Original data statistic value: {statistic(data)}')
+
+    # exact intervals calculation:
+    # GAMMA
+    exact_simulation = [statistic(np.random.gamma(shape=2, scale=3, size=100)) for _ in range(100000)]
+    print(f'Simulated value: {np.mean(exact_simulation)}, '
+          f'exact simulated CI: {np.quantile(exact_simulation, [(1 - alpha) / 2, 0.5 + alpha / 2])}')
+
+    print('Exact theoretical CI', np.array(scipy.stats.gamma.interval(alpha=0.90, a=2 * n, scale=3)) / n)
+
+    print('SKEW:', scipy.stats.skew(data))
+
+    # methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'studentized']
+    methods = ['percentile', 'smoothed']
+    compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
+
