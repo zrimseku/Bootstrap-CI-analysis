@@ -32,26 +32,17 @@ class Bootstrap:
         self.b = nr_bootstrap_samples
         self.bootstrap_indices = np.random.choice(range(self.n), size=[nr_bootstrap_samples, self.n])
 
-    def evaluate_statistic(self, sampling: str = 'nonparametric',
-                           sampling_args: dict = {'kernel': 'uniform', 'width': 1}):
+    def evaluate_statistic(self, noise: np.array = None, sampling: str = 'nonparametric'):
         """Evaluates statistic on bootstrapped datasets"""
         self.statistic_values = np.zeros(self.b)
         statistic_input = self.original_sample[self.bootstrap_indices]
-        if sampling == 'semiparametric':
-            if sampling_args['kernel'] == 'uniform':
-                noise = np.random.uniform(-sampling_args['width']/2, sampling_args['width']/2, statistic_input.shape)
-            elif sampling_args['kernel'] == 'uniform':
-                noise = np.random.normal(0, sampling_args['width'], statistic_input.shape)
-            else:
-                noise = np.zeros(statistic_input.shape)
-                print(f"Unknown kernel: {sampling_args['kernel']}")
-            statistic_input = self.original_sample[self.bootstrap_indices] + noise
-
-        # TODO: parametric sampling
-
+        if noise is not None:
+            statistic_input += noise
         for i in range(self.b):
-            # do we want to call statistic in a vectorized way, to avoid the for loop?
+            # do we want to call statistic in a vectorized way, to avoid the for loop? Pomojem ne, za splošnost?
             self.statistic_values[i] = self.statistic(statistic_input[i, :])
+
+        # TODO: parametric sampling?
 
     # TODO? For nested we can input sample and indices into evaluate_statistic, to have all evaluations in the same
     #  place? Put "nested" parameter into sampling, to return indices instead of saving them (should we just always
@@ -59,7 +50,7 @@ class Bootstrap:
 
     def ci(self, coverage: float, side: str = 'two', method: str = 'bca', nr_bootstrap_samples: int = None,
            seed: int = None, sampling: str = 'nonparametric',
-           sampling_args: dict = {'kernel': 'uniform', 'width': 1}) -> np.array:
+           sampling_args: dict = {'kernel': 'norm', 'width': 1}) -> np.array:
         """
         Returns confidence intervals.
         :param coverage: TODO
@@ -74,7 +65,8 @@ class Bootstrap:
 
         if nr_bootstrap_samples is not None:        # we will sample again, otherwise reuse previously sampled data
             self.sample(nr_bootstrap_samples, seed, sampling)
-            self.evaluate_statistic()
+            if method != 'smoothed':
+                self.evaluate_statistic()
 
         quantile = []
         if side == 'two':
@@ -129,8 +121,17 @@ class Bootstrap:
             return (self.original_statistic_value - np.quantile(t_samples, quantile) * se)[::-1]
 
         elif method == 'smoothed':
-            # smoothed = semiparametric
-            self.evaluate_statistic(sampling='semiparametric', sampling_args=sampling_args)
+            # TODO automatic setting of parameters (too big width breaks results)
+            input_shape = self.original_sample[self.bootstrap_indices].shape
+            if sampling_args['kernel'] == 'uniform':
+                noise = np.random.uniform(-sampling_args['width'] / 2, sampling_args['width'] / 2, input_shape)
+            elif sampling_args['kernel'] == 'norm':
+                noise = np.random.normal(0, sampling_args['width'], input_shape)
+            else:
+                noise = np.zeros(input_shape)
+                print(f"Unknown kernel: {sampling_args['kernel']}, using percentile method.")
+
+            self.evaluate_statistic(noise)
             return np.quantile(self.statistic_values, quantile)
 
         else:
@@ -198,7 +199,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 if __name__ == '__main__':
     # data generation
-    np.random.seed(0)
+    np.random.seed(4)
     n = 100
     # NORMAL
     # data = np.random.normal(5, 10, 100)
@@ -222,6 +223,6 @@ if __name__ == '__main__':
     print('SKEW:', scipy.stats.skew(data))
 
     # methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'studentized']
-    methods = ['percentile', 'smoothed']
+    methods = ['basic', 'percentile', 'bca', 'smoothed']
     compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
