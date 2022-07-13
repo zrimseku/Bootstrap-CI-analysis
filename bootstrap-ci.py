@@ -160,9 +160,41 @@ class Bootstrap:
         # a bo to posebej, a dodamo v ci, a sploh?
         pass
 
-    def draw_bootstrap_distribution(self):
+    def plot_bootstrap_distribution(self):
         """Draws distribution of statistic values on all bootstrap samples."""
         plt.hist(self.statistic_values, bins=30)
+        plt.show()
+
+    # DIAGNOSTICS - should they be in separate class?
+    def jackknife_after_bootstrap(self, bootstrap_statistics=[np.mean]):
+        jk_indices = {i: [j for j in range(self.b) if i not in self.bootstrap_indices[j, :]]
+                      for i in range(self.n)}   # gives indices of samples where the point is not included
+        # jk_values = {i: [self.statistic(self.original_sample[self.bootstrap_indices[j, :]]) for j in jk_indices[i]]
+        #              for i in range(self.n)}    # computes statistic value on those samples
+
+        jk_stat_values = {i: self.statistic_values[jk_indices[i]] for i in range(self.n)}   # statistic on those samples
+
+        # point influences on mean, a je prav da se to gleda? v članku mi ne zgleda, ampak more bit isti influence za
+        # vse statistike
+        jk_values = np.array([np.mean(jk_stat_values[i]) for i in range(self.n)])
+        jk_influence = (np.mean(jk_values) - jk_values) * (self.n - 1)
+        point_order = np.argsort(jk_influence)
+        # we can also compute influence on length and shape, if we will need it (Efron's JAB SE and Influence fn.)
+
+        min_val = self.original_statistic_value
+        for bs in bootstrap_statistics:
+            jk_values_bs = np.array([bs(jk_stat_values[i]) for i in range(self.n)])
+
+            plt.plot(jk_influence, jk_values_bs, 'o', color='black')
+            plt.plot(jk_influence[point_order], jk_values_bs[point_order], color='black')
+            plt.axhline(bs(self.statistic_values), linestyle='--', color='black')
+
+            min_val = min(min_val, min(jk_values_bs))
+
+        for point in range(self.n):
+            if abs(jk_influence[point]) > 1:
+                plt.text(jk_influence[point], min_val - (self.original_statistic_value - min_val) / 10, point)
+
         plt.show()
 
 
@@ -172,10 +204,10 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
         # initializations
         b_arch = boot_arch(data)
-        sampling_method = 'nonparametric'
         if method == 'standard':
             ma = 'norm'
         elif method == 'smoothed':
+            # change to percentile because smoothed is not implemented
             ma = 'percentile'
         else:
             ma = method
@@ -191,7 +223,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
         our = Bootstrap(data, statistic)
         our_ci = our.ci(coverage=alpha, nr_bootstrap_samples=B, method=method)  # , seed=0)
-        our.draw_bootstrap_distribution()
+        # our.plot_bootstrap_distribution()
         print(f'Our: {our_ci}')
 
         print('_____________________________________________________________________')
@@ -199,8 +231,8 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 if __name__ == '__main__':
     # data generation
-    np.random.seed(4)
-    n = 100
+    np.random.seed(0)
+    n = 10
     # NORMAL
     # data = np.random.normal(5, 10, 100)
     # GAMMA
@@ -214,15 +246,20 @@ if __name__ == '__main__':
 
     # exact intervals calculation:
     # GAMMA
-    exact_simulation = [statistic(np.random.gamma(shape=2, scale=3, size=100)) for _ in range(100000)]
-    print(f'Simulated value: {np.mean(exact_simulation)}, '
+    exact_simulation = [statistic(np.random.gamma(shape=2, scale=3, size=n)) for _ in range(100000)]
+    print(f'Simulated value: {statistic(exact_simulation)}, '
           f'exact simulated CI: {np.quantile(exact_simulation, [(1 - alpha) / 2, 0.5 + alpha / 2])}')
 
-    print('Exact theoretical CI', np.array(scipy.stats.gamma.interval(alpha=0.90, a=2 * n, scale=3)) / n)
+    # print('Exact theoretical CI', np.array(scipy.stats.gamma.interval(alpha=alpha, a=2 * n, scale=3)) / n) only mean
 
     print('SKEW:', scipy.stats.skew(data))
 
     # methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'studentized']
-    methods = ['basic', 'percentile', 'bca', 'smoothed']
-    compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
+    # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
+
+    # jackknife-after-bootstrap
+    our = Bootstrap(data, statistic)
+    our_ci = our.ci(coverage=alpha, nr_bootstrap_samples=B, method='percentile', seed=0)
+    our.jackknife_after_bootstrap([lambda x: np.quantile(x, 0.05), lambda x: np.quantile(x, 0.1), np.mean, np.median,
+                                   lambda x: np.quantile(x, 0.9), lambda x: np.quantile(x, 0.95)])
 
