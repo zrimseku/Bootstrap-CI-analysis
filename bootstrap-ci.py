@@ -228,7 +228,8 @@ class CompareIntervals:
             for alpha in self.alphas:
                 # ce zelimo dodatne (klasicne) metode en if stavek tuki
                 self.computed_intervals[method][alpha].append(bts.ci(coverage=alpha, side='one', method=method))
-            # print('finished', method
+            # print('finished', method)
+        return bts
 
     def exact_interval_simulation(self, repetitions):
         stat_values = []
@@ -242,13 +243,20 @@ class CompareIntervals:
     def draw_intervals(self, alphas_to_draw):
         data = self.dgp(self.n)
         self.alphas = np.union1d(self.alphas, alphas_to_draw)
-        self.compute_intervals(data)
+        bts = self.compute_intervals(data)
 
         # plotting
-        plt.hist(data, bins=30)
+        colors = iter(plt.cm.jet(np.linspace(0.05, 0.95, len(self.methods))))
+        plt.hist(bts.statistic_values, bins=30, label='statistic')
+        if 'smoothed' in self.methods:
+            plt.hist(bts.statistic_values_noise, bins=30, label='smoothed statistic', alpha=0.3)
         for method in self.methods:
+            col = next(colors)
             for alpha in alphas_to_draw:
-                plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', label=method)
+                if alpha == alphas_to_draw[0]:  # label only the first line of a method to avoid duplicates in legend
+                    plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', label=method, color=col)
+                else:
+                    plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', color=col)
 
         plt.legend()
         plt.show()
@@ -335,7 +343,8 @@ if __name__ == '__main__':
 
     # INTERVAL COMPARISON
     alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
-    statistic = np.mean
+
+    statistic = np.median
     true_stat_value = 3
     par2 = 2
 
