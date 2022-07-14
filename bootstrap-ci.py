@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats
+from tqdm import tqdm
 from scipy.stats import norm
 from scipy.stats import bootstrap as boot_sci
 from arch.bootstrap import IIDBootstrap as boot_arch
@@ -16,6 +17,7 @@ class Bootstrap:
         self.b = 0
         self.bootstrap_indices = np.empty(0)
         self.statistic_values = np.empty(0)
+        self.statistic_values_noise = np.empty(0)
         # sampling method?
         # CI method?
 
@@ -26,7 +28,7 @@ class Bootstrap:
         :param seed:
         :param sampling:
         """
-        # TODO: include semi-parametric and parametric sampling -> in evaluate?
+        # TODO: include semi-parametric and parametric sampling
         if seed is not None:
             np.random.seed(seed)
         self.b = nr_bootstrap_samples
@@ -35,12 +37,16 @@ class Bootstrap:
     def evaluate_statistic(self, noise: np.array = None, sampling: str = 'nonparametric'):
         """Evaluates statistic on bootstrapped datasets"""
         self.statistic_values = np.zeros(self.b)
-        statistic_input = self.original_sample[self.bootstrap_indices]
         if noise is not None:
-            statistic_input += noise
+            # save statistic values with noise separately, so we don't override the original ones when calling smoothed
+            self.statistic_values_noise = np.zeros(self.b)
+            statistic_input_noise = self.original_sample[self.bootstrap_indices]
+            statistic_input_noise += noise
         for i in range(self.b):
             # do we want to call statistic in a vectorized way, to avoid the for loop? Pomojem ne, za splošnost?
-            self.statistic_values[i] = self.statistic(statistic_input[i, :])
+            self.statistic_values[i] = self.statistic(self.original_sample[self.bootstrap_indices][i, :])
+            if noise is not None:
+                self.statistic_values_noise[i] = self.statistic(statistic_input_noise[i, :])
 
         # TODO: parametric sampling?
 
@@ -65,6 +71,8 @@ class Bootstrap:
 
         if nr_bootstrap_samples is not None:        # we will sample again, otherwise reuse previously sampled data
             self.sample(nr_bootstrap_samples, seed, sampling)
+
+        if len(self.statistic_values) == 0:
             if method != 'smoothed':
                 self.evaluate_statistic()
 
@@ -132,7 +140,7 @@ class Bootstrap:
                 print(f"Unknown kernel: {sampling_args['kernel']}, using percentile method.")
 
             self.evaluate_statistic(noise)
-            return np.quantile(self.statistic_values, quantile)
+            return np.quantile(self.statistic_values_noise, quantile)
 
         else:
             implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed']
@@ -167,6 +175,8 @@ class Bootstrap:
 
     # DIAGNOSTICS - should they be in separate class?
     def jackknife_after_bootstrap(self, bootstrap_statistics=[np.mean]):
+        # would it help to add exact to jackknife - this wouldn't be possible in real case, maybe we can find something
+        # from it + draw different percentiles for different methods, see which are less effected by single points
         jk_indices = {i: [j for j in range(self.b) if i not in self.bootstrap_indices[j, :]]
                       for i in range(self.n)}   # gives indices of samples where the point is not included
         # jk_values = {i: [self.statistic(self.original_sample[self.bootstrap_indices[j, :]]) for j in jk_indices[i]]
@@ -196,6 +206,66 @@ class Bootstrap:
                 plt.text(jk_influence[point], min_val - (self.original_statistic_value - min_val) / 10, point)
 
         plt.show()
+
+
+class CompareIntervals:
+
+    def __init__(self, statistic, methods, data_generator, n, b, alphas):
+        self.statistic = statistic
+        self.methods = methods
+        self.dgp = data_generator
+        self.n = n
+        self.b = b
+        self.alphas = alphas        # we are interested in one sided intervals, two sided can be computed from them
+        self.computed_intervals = {m: {a: [] for a in alphas} for m in methods}  # add all computed intervals
+
+    def compute_intervals(self, data):
+        # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
+        bts = Bootstrap(data, self.statistic)
+        bts.sample(self.b)
+        bts.evaluate_statistic()
+        for method in self.methods:
+            for alpha in self.alphas:
+                # ce zelimo dodatne (klasicne) metode en if stavek tuki
+                self.computed_intervals[method][alpha].append(bts.ci(coverage=alpha, side='one', method=method))
+            # print('finished', method
+
+    def exact_interval_simulation(self, repetitions):
+        stat_values = []
+        for r in range(repetitions):
+            data = self.dgp(self.n)
+            stat_values.append(self.statistic(data))
+
+        self.computed_intervals['exact'] = {a: [np.quantile(stat_values, a)] for a in self.alphas}
+        return np.mean(stat_values)
+
+    def draw_intervals(self, alphas_to_draw):
+        data = self.dgp(self.n)
+        self.alphas = np.union1d(self.alphas, alphas_to_draw)
+        self.compute_intervals(data)
+
+        # plotting
+        plt.hist(data, bins=30)
+        for method in self.methods:
+            for alpha in alphas_to_draw:
+                plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', label=method)
+
+        plt.legend()
+        plt.show()
+
+    def compare_coverages(self, repetitions, true_statistic_value=None):
+        if true_statistic_value is None:
+            # compute true statistic value from exact simulation, if it is not given
+            # a je to vedno pravilno?
+            true_statistic_value = self.exact_interval_simulation(repetitions)
+
+        for r in tqdm(range(repetitions)):
+            data = self.dgp(self.n)
+            self.compute_intervals(data)
+
+        coverages = {method: {alpha: np.mean(np.array(self.computed_intervals[method][alpha][-repetitions:]) >
+                                             true_statistic_value) for alpha in self.alphas} for method in self.methods}
+        return coverages
 
 
 def compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha):
@@ -254,12 +324,28 @@ if __name__ == '__main__':
 
     print('SKEW:', scipy.stats.skew(data))
 
-    # methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'studentized']
+    methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'smoothed']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
-    our = Bootstrap(data, statistic)
-    our_ci = our.ci(coverage=alpha, nr_bootstrap_samples=B, method='percentile', seed=0)
-    our.jackknife_after_bootstrap([lambda x: np.quantile(x, 0.05), lambda x: np.quantile(x, 0.1), np.mean, np.median,
-                                   lambda x: np.quantile(x, 0.9), lambda x: np.quantile(x, 0.95)])
+    # our = Bootstrap(data, statistic)
+    # our_ci = our.ci(coverage=alpha, nr_bootstrap_samples=B, method='percentile', seed=0)
+    # our.jackknife_after_bootstrap([lambda x: np.quantile(x, 0.05), lambda x: np.quantile(x, 0.1), np.mean, np.median,
+    #                                lambda x: np.quantile(x, 0.9), lambda x: np.quantile(x, 0.95)])
 
+    # INTERVAL COMPARISON
+    alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
+    statistic = np.mean
+    true_stat_value = 3
+    par2 = 2
+
+    def dgp_norm(x):
+        return np.random.normal(true_stat_value, par2, size=x)
+
+    def dgp_gamma(x):
+        return np.random.gamma(shape=true_stat_value/par2, scale=par2, size=x)
+
+    comparison = CompareIntervals(statistic, methods, dgp_gamma, n, B, alphas)
+    # print(comparison.compare_coverages(repetitions=100, true_statistic_value=true_stat_value))
+
+    comparison.draw_intervals([0.1, 0.9])
