@@ -56,7 +56,7 @@ class Bootstrap:
 
     def ci(self, coverage: float, side: str = 'two', method: str = 'bca', nr_bootstrap_samples: int = None,
            seed: int = None, sampling: str = 'nonparametric',
-           sampling_args: dict = {'kernel': 'norm', 'width': 1}) -> np.array:
+           sampling_args: dict = {'kernel': 'norm', 'width': None}) -> np.array:
         """
         Returns confidence intervals.
         :param coverage: TODO
@@ -129,12 +129,18 @@ class Bootstrap:
             return (self.original_statistic_value - np.quantile(t_samples, quantile) * se)[::-1]
 
         elif method == 'smoothed':
-            # TODO automatic setting of parameters (too big width breaks results)
+            # TODO smarter automatic setting of parameters
             input_shape = self.original_sample[self.bootstrap_indices].shape
+            if sampling_args['width'] is None:
+                # parameter set as mean difference of each coordinate between ordered samples
+                ordered_samples = np.sort(self.original_sample, axis=0)
+                h = abs(np.mean(ordered_samples[1:] - ordered_samples[:-1]))
+            else:
+                h = sampling_args['width']
             if sampling_args['kernel'] == 'uniform':
-                noise = np.random.uniform(-sampling_args['width'] / 2, sampling_args['width'] / 2, input_shape)
+                noise = np.random.uniform(-h/2, h/2, input_shape)
             elif sampling_args['kernel'] == 'norm':
-                noise = np.random.normal(0, sampling_args['width'], input_shape)
+                noise = np.random.normal(0, h, input_shape)
             else:
                 noise = np.zeros(input_shape)
                 print(f"Unknown kernel: {sampling_args['kernel']}, using percentile method.")
