@@ -148,9 +148,20 @@ class Bootstrap:
             self.evaluate_statistic(noise)
             return np.quantile(self.statistic_values_noise, quantile)
 
+        elif method == 'double':
+            # get percentiles of original value in inner bootstrap samples
+            nested_btsp_values = self.nested_bootstrap(self.b)
+            sample_quantiles = np.mean(nested_btsp_values < self.original_statistic_value, axis=1)
+            # TODO kasneje: ta coverage iz drugih metod, ne samo percentile - lahko naredimo cel bootstrap iterativen?
+            # TODO za dvostranskega popravimo obe strani za isto
+            new_quantiles = np.quantile(sample_quantiles, quantile)
+            # TODO iterative bootstrap
+            print('New quantiles: ', new_quantiles, f'({quantile})')
+            return np.quantile(self.statistic_values, new_quantiles)
+
         else:
-            implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed']
-            assert ValueError(f'This method is not supported, choose between {implemented_methods}.')
+            implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed', 'double']
+            raise ValueError(f'This method is not supported, choose between {implemented_methods}.')
 
     def studentized_error_calculation(self):
         # TODO
@@ -160,18 +171,23 @@ class Bootstrap:
         #  paralelizacija
 
         # NESTED BOOTSTRAP:
-        standard_errors = np.zeros(self.b)
-        for i in range(self.b):
-            new_indices = np.random.choice(self.bootstrap_indices[i, :], size=[self.b, self.n])
-            new_values = np.zeros(self.b)
-            for j in range(self.b):
-                new_values[j] = self.statistic(self.original_sample[new_indices[j, :]])
-            standard_errors[i] = np.std(new_values)
+        nested_btsp_values = self.nested_bootstrap(self.b)
+        standard_errors = np.std(nested_btsp_values, axis=1)
 
         return standard_errors
 
+    def nested_bootstrap(self, b_inner):
+        new_values = np.zeros([self.b, b_inner])
+        for i in range(self.b):
+            new_indices = np.random.choice(self.bootstrap_indices[i, :], size=[b_inner, self.n])
+            # new_values = np.zeros(self.b)
+            for j in range(b_inner):
+                new_values[i, j] = self.statistic(self.original_sample[new_indices[j, :]])
+
+        return new_values
+
     def calibration(self):
-        # a bo to posebej, a dodamo v ci, a sploh?
+        # a bo to posebej, a dodamo v ci, a sploh? -> = double bootstrap, bo tam
         pass
 
     def plot_bootstrap_distribution(self):
@@ -231,6 +247,7 @@ class CompareIntervals:
         bts.sample(self.b)
         bts.evaluate_statistic()
         for method in self.methods:
+            # TODO: avoid new computations for each alpha?
             for alpha in self.alphas:
                 # ce zelimo dodatne (klasicne) metode en if stavek tuki
                 self.computed_intervals[method][alpha].append(bts.ci(coverage=alpha, side='one', method=method)[0])
@@ -286,7 +303,7 @@ class CompareIntervals:
         if length is not None:
             low_alpha, high_alpha = [(1-length)/2, (length+1)/2]
             if low_alpha not in self.alphas or high_alpha not in self.alphas:
-                assert ValueError(f"Length of {length} CI can't be calculated, because we don't have calculations for"
+                raise ValueError(f"Length of {length} CI can't be calculated, because we don't have calculations for"
                                   f"corresponding alphas.")
         else:
             low_alpha, high_alpha = [min(self.alphas), max(self.alphas)]
@@ -351,7 +368,7 @@ if __name__ == '__main__':
 
     # other settings
     statistic = np.median
-    B = 1000
+    B = 100
     alpha = 0.9
     print(f'Original data statistic value: {statistic(data)}')
 
@@ -365,7 +382,7 @@ if __name__ == '__main__':
 
     print('SKEW:', scipy.stats.skew(data))
 
-    methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'smoothed']
+    methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'smoothed', 'double']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
