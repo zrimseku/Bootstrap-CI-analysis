@@ -152,10 +152,16 @@ class Bootstrap:
             # get percentiles of original value in inner bootstrap samples
             nested_btsp_values = self.nested_bootstrap(self.b)
             sample_quantiles = np.mean(nested_btsp_values < self.original_statistic_value, axis=1)
+
+            if side == 'two':
+                t = abs(0.5 - sample_quantiles)     # change quantiles to one parameter to get symmetric interval
+                t_quantile = np.quantile(t, coverage)
+                new_quantiles = [0.5 - t_quantile, 0.5 + t_quantile]
+            else:
+                new_quantiles = np.quantile(sample_quantiles, quantile)
             # TODO kasneje: ta coverage iz drugih metod, ne samo percentile - lahko naredimo cel bootstrap iterativen?
             # TODO za dvostranskega popravimo obe strani za isto
-            new_quantiles = np.quantile(sample_quantiles, quantile)
-            # TODO iterative bootstrap
+            # TODO iterative bootstrap (možno več iteracij)
             print('New quantiles: ', new_quantiles, f'({quantile})')
             return np.quantile(self.statistic_values, new_quantiles)
 
@@ -304,7 +310,7 @@ class CompareIntervals:
             low_alpha, high_alpha = [(1-length)/2, (length+1)/2]
             if low_alpha not in self.alphas or high_alpha not in self.alphas:
                 raise ValueError(f"Length of {length} CI can't be calculated, because we don't have calculations for"
-                                  f"corresponding alphas.")
+                                 f"corresponding alphas.")
         else:
             low_alpha, high_alpha = [min(self.alphas), max(self.alphas)]
             print(f'Calculating lengths of {high_alpha - low_alpha} CI, from {low_alpha} to {high_alpha} quantiles.')
