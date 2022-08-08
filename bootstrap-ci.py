@@ -73,8 +73,8 @@ class Bootstrap:
             self.sample(nr_bootstrap_samples, seed, sampling)
 
         if len(self.statistic_values) == 0:
-            if method != 'smoothed':
-                self.evaluate_statistic()
+            # if method != 'smoothed':  calculate even for smoothed, to get the rule-of-thumb estimation of bandwidth
+            self.evaluate_statistic()
 
         quantile = []
         if side == 'two':
@@ -132,13 +132,17 @@ class Bootstrap:
             # TODO smarter automatic setting of parameters
             input_shape = self.original_sample[self.bootstrap_indices].shape
             if sampling_args['width'] is None:
-                # parameter set as mean difference of each coordinate between ordered samples
-                ordered_samples = np.sort(self.original_sample, axis=0)
-                h = abs(np.mean(ordered_samples[1:] - ordered_samples[:-1]))
+                # parameter set as mean difference of each coordinate between ordered samples - naive idea
+                # ordered_samples = np.sort(self.original_sample, axis=0)
+                # h = abs(np.mean(ordered_samples[1:] - ordered_samples[:-1]))
+
+                # rule of thumb width selection (we can improve it with AMISE/MISE approximation if needed)
+                iqr = np.quantile(self.statistic_values, 0.75) - np.quantile(self.statistic_values, 0.25)
+                h = 0.9 * min(np.std(self.statistic_values), iqr / 1.34) * (self.n ** -0.2)
             else:
                 h = sampling_args['width']
             if sampling_args['kernel'] == 'uniform':
-                noise = np.random.uniform(-h/2, h/2, input_shape)
+                noise = np.random.uniform(-h, h, input_shape)       # -h, h from scikit-learn documentation
             elif sampling_args['kernel'] == 'norm':
                 noise = np.random.normal(0, h, input_shape)
             else:
@@ -192,9 +196,9 @@ class Bootstrap:
 
         return new_values
 
-    def calibration(self):
-        # a bo to posebej, a dodamo v ci, a sploh? -> = double bootstrap, bo tam
-        pass
+    # def calibration(self):
+    #     # a bo to posebej, a dodamo v ci, a sploh? -> = double bootstrap, bo tam
+    #     pass
 
     def plot_bootstrap_distribution(self):
         """Draws distribution of statistic values on all bootstrap samples."""
@@ -261,6 +265,7 @@ class CompareIntervals:
         return bts
 
     def exact_interval_simulation(self, repetitions):
+        # Framework should get this info, not compute it. WRONG intervals, should be around theta hat.
         stat_values = []
         for r in range(repetitions):
             data = self.dgp(self.n)
@@ -366,7 +371,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 if __name__ == '__main__':
     # data generation
     np.random.seed(0)
-    n = 10
+    n = 100
     # NORMAL
     # data = np.random.normal(5, 10, 100)
     # GAMMA
@@ -374,7 +379,7 @@ if __name__ == '__main__':
 
     # other settings
     statistic = np.median
-    B = 100
+    B = 1000
     alpha = 0.9
     print(f'Original data statistic value: {statistic(data)}')
 
@@ -388,7 +393,7 @@ if __name__ == '__main__':
 
     print('SKEW:', scipy.stats.skew(data))
 
-    methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'smoothed', 'double']
+    methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'smoothed']#, 'double']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
@@ -400,7 +405,7 @@ if __name__ == '__main__':
     # INTERVAL COMPARISON
     alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
 
-    statistic = np.mean
+    statistic = np.median
     true_stat_value = 3
     par2 = 2
 
