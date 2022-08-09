@@ -14,6 +14,9 @@ class DGP:
         raise NotImplementedError()
 
     def get_true_value(self, statistic_name):
+        if statistic_name not in self.true_statistics:
+            raise ValueError(f"True value of {statistic_name} is not known. You should specify it at DGP "
+                             f"initialization.")
         return self.true_statistics[statistic_name]
 
 
@@ -30,7 +33,8 @@ class DGPNorm(DGP):
         self.true_statistics['95_percentil'] = loc + 1.645 * scale
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
-        return np.random.normal(self.loc, self.scale, size=(nr_samples, sample_size))
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        return np.random.normal(self.loc, self.scale, size=size)
 
 
 class DGPExp(DGP):
@@ -45,7 +49,8 @@ class DGPExp(DGP):
         self.true_statistics['95_percentil'] = scale * np.log(20)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
-        return np.random.exponential(self.scale, size=(nr_samples, sample_size))
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        return np.random.exponential(self.scale, size=size)
 
 
 class DGPBeta(DGP):
@@ -61,7 +66,8 @@ class DGPBeta(DGP):
         self.true_statistics['median'] = scipy.stats.beta.ppf(0.5, alpha, beta)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
-        return np.random.beta(self.alpha, self.beta, size=(nr_samples, sample_size))
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        return np.random.beta(self.alpha, self.beta, size=size)
 
 
 class DGPLogNorm(DGP):
@@ -77,7 +83,8 @@ class DGPLogNorm(DGP):
         self.true_statistics['95_percentil'] = np.exp(mean + 1.645 * sigma)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
-        return np.random.lognormal(self.mean, self.sigma, size=(nr_samples, sample_size))
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        return np.random.lognormal(self.mean, self.sigma, size=size)
 
 
 class DGPLaplace(DGP):
@@ -93,7 +100,8 @@ class DGPLaplace(DGP):
         self.true_statistics['95_percentil'] = loc - scale * np.log(0.1)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
-        return np.random.laplace(self.loc, self.scale, size=(nr_samples, sample_size))
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        return np.random.laplace(self.loc, self.scale, size=size)
 
 
 class DGPBernoulli(DGP):
@@ -113,7 +121,8 @@ class DGPBernoulli(DGP):
         self.true_statistics['95_percentil'] = p >= 0.05
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
-        return np.random.binomial(1, self.p, size=(nr_samples, sample_size))
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        return np.random.binomial(1, self.p, size=size)
 
 
 class DGPCategorical(DGP):
@@ -129,7 +138,8 @@ class DGPCategorical(DGP):
         self.true_statistics['95_percentil'] = (pvals >= 0.05).astype(int)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
-        return np.random.multinomial(1, self.pvals, size=(nr_samples, sample_size))
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        return np.random.multinomial(1, self.pvals, size=size)
 
 
 class DGPBiNorm(DGP):
@@ -146,5 +156,6 @@ class DGPBiNorm(DGP):
         self.true_statistics['corr'] = cov[0, 1] / (cov[0, 0] * cov[1, 1]) ** 0.5   # TODO extend it to multiple??
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
-        return np.random.multivariate_normal(self.mean, self.cov, size=(nr_samples, sample_size))
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        return np.random.multivariate_normal(self.mean, self.cov, size=size)
 

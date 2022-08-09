@@ -7,11 +7,13 @@ from arch.bootstrap import IIDBootstrap as boot_arch
 import matplotlib.pyplot as plt
 
 from ci_methods import Bootstrap
+from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPBernoulli, DGPCategorical
 
 
 class CompareIntervals:
 
-    def __init__(self, statistic, methods, data_generator, n, b, alphas):
+    def __init__(self, statistic: callable, methods: list[str], data_generator: DGP, n: int, b: int,
+                 alphas: list[float]):
         self.statistic = statistic
         self.methods = methods
         self.dgp = data_generator
@@ -20,7 +22,7 @@ class CompareIntervals:
         self.alphas = alphas        # we are interested in one sided intervals, two sided can be computed from them
         self.computed_intervals = {m: {a: [] for a in alphas} for m in methods}  # add all computed intervals
 
-    def compute_intervals(self, data):
+    def compute_intervals(self, data: np.array):
         # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
         bts = Bootstrap(data, self.statistic)
         bts.sample(self.b)
@@ -33,18 +35,18 @@ class CompareIntervals:
             # print('finished', method)
         return bts
 
-    def exact_interval_simulation(self, repetitions):
+    def exact_interval_simulation(self, repetitions: int):
         # Framework should get this info, not compute it. WRONG intervals, should be around theta hat.
         stat_values = []
+        data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
         for r in range(repetitions):
-            data = self.dgp(self.n)
-            stat_values.append(self.statistic(data))
+            stat_values.append(self.statistic(data[r]))
 
         self.computed_intervals['exact'] = {a: [np.quantile(stat_values, a)] for a in self.alphas}
         return np.mean(stat_values)
 
-    def draw_intervals(self, alphas_to_draw):
-        data = self.dgp(self.n)
+    def draw_intervals(self, alphas_to_draw: list[float]):
+        data = self.dgp.sample(sample_size=self.n)
         self.alphas = np.union1d(self.alphas, alphas_to_draw)
         bts = self.compute_intervals(data)
 
@@ -58,22 +60,20 @@ class CompareIntervals:
             for alpha in alphas_to_draw:
                 if alpha == alphas_to_draw[0]:  # label only the first line of a method to avoid duplicates in legend
                     plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', label=method, color=col,
-                                alpha=0.8)
+                                alpha=0.75)
                 else:
-                    plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', color=col, alpha=0.8)
+                    plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', color=col, alpha=0.75)
 
         plt.legend()
         plt.show()
 
-    def compare_intervals(self, repetitions, true_statistic_value=None, length=None):
-        if true_statistic_value is None:
-            # compute true statistic value from exact simulation, if it is not given
-            true_statistic_value = self.exact_interval_simulation(repetitions)
+    def compare_intervals(self, repetitions, length=None):
+        true_statistic_value = self.dgp.get_true_value(self.statistic.__name__)
 
         stat_original = []
-        for _ in tqdm(range(repetitions)):
-            data = self.dgp(self.n)
-            bts = self.compute_intervals(data)
+        data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
+        for r in tqdm(range(repetitions)):
+            bts = self.compute_intervals(data[r])
             stat_original.append(bts.original_statistic_value)
         stat_original = np.array(stat_original)
 
@@ -148,7 +148,7 @@ if __name__ == '__main__':
 
     # other settings
     statistic = np.median
-    B = 1000
+    B = 100
     alpha = 0.9
     print(f'Original data statistic value: {statistic(data)}')
 
@@ -162,7 +162,7 @@ if __name__ == '__main__':
 
     print('SKEW:', scipy.stats.skew(data))
 
-    methods = ['basic', 'percentile', 'bca', 'bc', 'standard', 'smoothed']#, 'double']
+    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed']#, 'double']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
@@ -175,17 +175,17 @@ if __name__ == '__main__':
     alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
 
     statistic = np.median
-    true_stat_value = 3
-    par2 = 2
 
-    def dgp_norm(x):
-        return np.random.normal(true_stat_value, par2, size=x)
+    # def dgp_norm(x):
+    #     return np.random.normal(true_stat_value, par2, size=x)
+    #
+    # def dgp_gamma(x):
+    #     return np.random.gamma(shape=true_stat_value/par2, scale=par2, size=x)
 
-    def dgp_gamma(x):
-        return np.random.gamma(shape=true_stat_value/par2, scale=par2, size=x)
+    dgp = DGPNorm(0, 1, 3)
 
-    comparison = CompareIntervals(statistic, methods, dgp_gamma, n, B, alphas)
-    for c in comparison.compare_intervals(repetitions=100, true_statistic_value=true_stat_value):
+    comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
+    for c in comparison.compare_intervals(repetitions=100, true_statistic_value=dgp.get_true_value('median')):
         print(c)
 
     comparison.draw_intervals([0.1, 0.9])
