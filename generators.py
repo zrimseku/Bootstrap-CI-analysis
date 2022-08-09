@@ -60,23 +60,6 @@ class DGPBeta(DGP):
         self.true_statistics['95_percentil'] = scipy.stats.beta.ppf(0.95, alpha, beta)
         self.true_statistics['median'] = scipy.stats.beta.ppf(0.5, alpha, beta)
 
-        # multiple expressions for median, it doesn't have closed form expression
-        # if alpha == beta:
-        #     self.true_statistics['median'] = 0.5
-        # elif alpha == 1 and beta > 0:
-        #     self.true_statistics['median'] = 1 - 2 ** (-1 / beta)
-        # elif alpha > 0 and beta == 1:
-        #     self.true_statistics['median'] = 2 ** (-1 / alpha)
-        # elif alpha == 3 and beta == 2:
-        #     self.true_statistics['median'] = 0.6142724318676105
-        # elif alpha == 2 and beta == 3:
-        #     self.true_statistics['median'] = 0.38572756813238945
-        # elif alpha > 1 and beta > 1 and 'median' not in self.true_statistics:  # this is approximation
-        #     self.true_statistics['median'] = (alpha - 1 / 3) / (alpha + beta - 3 / 2)
-        # else:
-        #     if 'median' not in self.true_statistics:
-        #         print("Median for such parameters is not known, you should specify its true value at initialization.")
-
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         return np.random.beta(self.alpha, self.beta, size=(nr_samples, sample_size))
 
