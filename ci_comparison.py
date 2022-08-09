@@ -19,8 +19,9 @@ class CompareIntervals:
         self.dgp = data_generator
         self.n = n
         self.b = b
-        self.alphas = alphas        # we are interested in one sided intervals, two sided can be computed from them
+        self.alphas = alphas  # we are interested in one sided intervals, two sided can be computed from them
         self.computed_intervals = {m: {a: [] for a in alphas} for m in methods}  # add all computed intervals
+        self.inverse_cdf = {}
 
     def compute_intervals(self, data: np.array):
         # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
@@ -37,13 +38,15 @@ class CompareIntervals:
 
     def exact_interval_simulation(self, repetitions: int):
         # Framework should get this info, not compute it. WRONG intervals, should be around theta hat.
-        stat_values = []
+        stat_values = np.empty(repetitions)
         data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
         for r in range(repetitions):
-            stat_values.append(self.statistic(data[r]))
+            stat_values[r] = self.statistic(data[r])
 
-        self.computed_intervals['exact'] = {a: [np.quantile(stat_values, a)] for a in self.alphas}
-        return np.mean(stat_values)
+        distribution = stat_values - self.dgp.get_true_value(self.statistic.__name__)
+
+        # inverse cdf that is used for exact interval calculation
+        self.inverse_cdf = {a: np.quantile(distribution, 1 - a) for a in self.alphas}
 
     def draw_intervals(self, alphas_to_draw: list[float]):
         data = self.dgp.sample(sample_size=self.n)
@@ -76,12 +79,20 @@ class CompareIntervals:
             bts = self.compute_intervals(data[r])
             stat_original.append(bts.original_statistic_value)
         stat_original = np.array(stat_original)
+        self.computed_intervals['exact'] = {a: stat_original - self.inverse_cdf[a] for a in self.alphas}
 
         coverages = {method: {alpha: np.mean(np.array(self.computed_intervals[method][alpha][-repetitions:]) >
                                              true_statistic_value) for alpha in self.alphas} for method in self.methods}
 
+        distances_from_exact = {method: {alpha: np.array(self.computed_intervals[method][alpha][-repetitions:]) -
+                                                self.computed_intervals['exact'] for alpha in self.alphas}
+                                for method in self.methods}
+        distance_from_exact_stats = {method: {alpha: {'mean': np.mean(distances_from_exact[method][alpha]),
+                                                      'std': np.std(distances_from_exact[method][alpha])}
+                                              for alpha in self.alphas} for method in self.methods}
+
         if length is not None:
-            low_alpha, high_alpha = [(1-length)/2, (length+1)/2]
+            low_alpha, high_alpha = [(1 - length) / 2, (length + 1) / 2]
             if low_alpha not in self.alphas or high_alpha not in self.alphas:
                 raise ValueError(f"Length of {length} CI can't be calculated, because we don't have calculations for"
                                  f"corresponding alphas.")
@@ -103,7 +114,7 @@ class CompareIntervals:
         shape_stats = {method: {'mean': np.mean(shapes[method]), 'std': np.std(shapes[method])}
                        for method in self.methods}
 
-        return coverages, length_stats, shape_stats
+        return coverages, length_stats, shape_stats, distance_from_exact_stats
 
 
 def compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha):
@@ -120,7 +131,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
         else:
             ma = method
         ci_arch = b_arch.conf_int(statistic, B, method=ma, size=alpha)
-        print(f'Arch: {ci_arch[:,0]}')
+        print(f'Arch: {ci_arch[:, 0]}')
 
         if method in ['basic', 'percentile', 'bca']:
             # only these are implemented in scipy
@@ -162,7 +173,7 @@ if __name__ == '__main__':
 
     print('SKEW:', scipy.stats.skew(data))
 
-    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed']#, 'double']
+    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed']  # , 'double']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
@@ -189,4 +200,3 @@ if __name__ == '__main__':
         print(c)
 
     comparison.draw_intervals([0.1, 0.9])
-
