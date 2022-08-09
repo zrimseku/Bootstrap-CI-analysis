@@ -37,7 +37,6 @@ class CompareIntervals:
         return bts
 
     def exact_interval_simulation(self, repetitions: int):
-        # Framework should get this info, not compute it. WRONG intervals, should be around theta hat.
         stat_values = np.empty(repetitions)
         data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
         for r in range(repetitions):
@@ -53,8 +52,13 @@ class CompareIntervals:
         self.alphas = np.union1d(self.alphas, alphas_to_draw)
         bts = self.compute_intervals(data)
 
+        # exact intervals calculation
+        if not np.array([a in self.inverse_cdf for a in alphas_to_draw]).all():
+            self.exact_interval_simulation(10000)
+        exact_intervals = [self.statistic(data) - self.inverse_cdf[a] for a in alphas_to_draw]
+
         # plotting
-        colors = iter(plt.cm.jet(np.linspace(0, 0.95, len(self.methods))))
+        colors = iter(plt.cm.jet(np.linspace(0.05, 0.95, len(self.methods))))
         plt.hist(bts.statistic_values, bins=30, label='statistic')
         if 'smoothed' in self.methods:
             plt.hist(bts.statistic_values_noise, bins=30, label='smoothed statistic', alpha=0.3)
@@ -67,11 +71,19 @@ class CompareIntervals:
                 else:
                     plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', color=col, alpha=0.75)
 
+        # draw exact intervals
+        for e in exact_intervals:
+            if e == exact_intervals[0]:
+                plt.axvline(e, linestyle=':', label='exact', color='black', alpha=0.75)
+            else:
+                plt.axvline(e, linestyle=':', color='black', alpha=0.75)
+
         plt.legend()
         plt.show()
 
     def compare_intervals(self, repetitions, length=None):
         true_statistic_value = self.dgp.get_true_value(self.statistic.__name__)
+        self.exact_interval_simulation(10000)
 
         stat_original = []
         data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
@@ -85,8 +97,9 @@ class CompareIntervals:
                                              true_statistic_value) for alpha in self.alphas} for method in self.methods}
 
         distances_from_exact = {method: {alpha: np.array(self.computed_intervals[method][alpha][-repetitions:]) -
-                                                self.computed_intervals['exact'] for alpha in self.alphas}
+                                                self.computed_intervals['exact'][alpha] for alpha in self.alphas}
                                 for method in self.methods}
+
         distance_from_exact_stats = {method: {alpha: {'mean': np.mean(distances_from_exact[method][alpha]),
                                                       'std': np.std(distances_from_exact[method][alpha])}
                                               for alpha in self.alphas} for method in self.methods}
@@ -196,7 +209,7 @@ if __name__ == '__main__':
     dgp = DGPNorm(0, 1, 3)
 
     comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
-    for c in comparison.compare_intervals(repetitions=100, true_statistic_value=dgp.get_true_value('median')):
+    for c in comparison.compare_intervals(repetitions=100):
         print(c)
 
     comparison.draw_intervals([0.1, 0.9])
