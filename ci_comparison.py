@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import scipy.stats
 from tqdm import tqdm
@@ -22,6 +24,10 @@ class CompareIntervals:
         self.alphas = alphas  # we are interested in one sided intervals, two sided can be computed from them
         self.computed_intervals = {m: {a: [] for a in alphas} for m in methods}  # add all computed intervals
         self.inverse_cdf = {}
+        self.times = {m: [] for m in methods}
+        self.coverages = {}
+        self.distances_from_exact = {}
+        self.lengths = {}
 
     def compute_intervals(self, data: np.array):
         # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
@@ -32,7 +38,10 @@ class CompareIntervals:
             # TODO: avoid new computations for each alpha?
             for alpha in self.alphas:
                 # ce zelimo dodatne (klasicne) metode en if stavek tuki
-                self.computed_intervals[method][alpha].append(bts.ci(coverage=alpha, side='one', method=method)[0])
+                t = time.time()
+                ci = bts.ci(coverage=alpha, side='one', method=method)
+                self.times[method].append(time.time() - t)
+                self.computed_intervals[method][alpha].append(ci[0])
             # print('finished', method)
         return bts
 
@@ -61,7 +70,7 @@ class CompareIntervals:
         colors = iter(plt.cm.jet(np.linspace(0.05, 0.95, len(self.methods))))
         plt.hist(bts.statistic_values, bins=30, label='statistic')
         if 'smoothed' in self.methods:
-            plt.hist(bts.statistic_values_noise, bins=30, label='smoothed statistic', alpha=0.3)
+            plt.hist(bts.statistic_values_noise, bins=30, label='smoothed stat.', alpha=0.3)
         for method in self.methods:
             col = next(colors)
             for alpha in alphas_to_draw:
@@ -78,6 +87,7 @@ class CompareIntervals:
             else:
                 plt.axvline(e, linestyle=':', color='black', alpha=0.75)
 
+        plt.title(f'Interval {alphas_to_draw} for {self.statistic.__name__}, n = {self.n}, B = {self.b}')
         plt.legend()
         plt.show()
 
@@ -88,20 +98,21 @@ class CompareIntervals:
         stat_original = []
         data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
         for r in tqdm(range(repetitions)):
-            bts = self.compute_intervals(data[r])
+            bts, times = self.compute_intervals(data[r])
             stat_original.append(bts.original_statistic_value)
         stat_original = np.array(stat_original)
         self.computed_intervals['exact'] = {a: stat_original - self.inverse_cdf[a] for a in self.alphas}
 
-        coverages = {method: {alpha: np.mean(np.array(self.computed_intervals[method][alpha][-repetitions:]) >
-                                             true_statistic_value) for alpha in self.alphas} for method in self.methods}
+        self.coverages = {method: {alpha: np.mean(np.array(self.computed_intervals[method][alpha][-repetitions:]) >
+                                                  true_statistic_value) for alpha in self.alphas}
+                          for method in self.methods}
 
-        distances_from_exact = {method: {alpha: np.array(self.computed_intervals[method][alpha][-repetitions:]) -
-                                                self.computed_intervals['exact'][alpha] for alpha in self.alphas}
-                                for method in self.methods}
+        self.distances_from_exact = {method: {alpha: np.array(self.computed_intervals[method][alpha][-repetitions:]) -
+                                                     self.computed_intervals['exact'][alpha] for alpha in self.alphas}
+                                     for method in self.methods}
 
-        distance_from_exact_stats = {method: {alpha: {'mean': np.mean(distances_from_exact[method][alpha]),
-                                                      'std': np.std(distances_from_exact[method][alpha])}
+        distance_from_exact_stats = {method: {alpha: {'mean': np.mean(self.distances_from_exact[method][alpha]),
+                                                      'std': np.std(self.distances_from_exact[method][alpha])}
                                               for alpha in self.alphas} for method in self.methods}
 
         if length is not None:
@@ -113,11 +124,11 @@ class CompareIntervals:
             low_alpha, high_alpha = [min(self.alphas), max(self.alphas)]
             print(f'Calculating lengths of {high_alpha - low_alpha} CI, from {low_alpha} to {high_alpha} quantiles.')
 
-        lengths = {method: np.array(self.computed_intervals[method][high_alpha][-repetitions:]) -
-                           np.array(self.computed_intervals[method][low_alpha][-repetitions:])
-                   for method in self.methods}
+        self.lengths = {method: np.array(self.computed_intervals[method][high_alpha][-repetitions:]) -
+                                np.array(self.computed_intervals[method][low_alpha][-repetitions:])
+                        for method in self.methods}
 
-        length_stats = {method: {'mean': np.mean(lengths[method]), 'std': np.std(lengths[method])}
+        length_stats = {method: {'mean': np.mean(self.lengths[method]), 'std': np.std(self.lengths[method])}
                         for method in self.methods}
 
         shapes = {method: (np.array(self.computed_intervals[method][high_alpha][-repetitions:]) - stat_original) /
@@ -127,7 +138,7 @@ class CompareIntervals:
         shape_stats = {method: {'mean': np.mean(shapes[method]), 'std': np.std(shapes[method])}
                        for method in self.methods}
 
-        return coverages, length_stats, shape_stats, distance_from_exact_stats
+        return self.coverages, length_stats, shape_stats, distance_from_exact_stats
 
 
 def compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha):
@@ -164,7 +175,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 if __name__ == '__main__':
     # data generation
     np.random.seed(0)
-    n = 100
+    n = 500
     # NORMAL
     # data = np.random.normal(5, 10, 100)
     # GAMMA
@@ -198,7 +209,7 @@ if __name__ == '__main__':
     # INTERVAL COMPARISON
     alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
 
-    statistic = np.median
+    statistic = np.mean
 
     # def dgp_norm(x):
     #     return np.random.normal(true_stat_value, par2, size=x)
@@ -209,7 +220,7 @@ if __name__ == '__main__':
     dgp = DGPNorm(0, 1, 3)
 
     comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
-    for c in comparison.compare_intervals(repetitions=100):
-        print(c)
+    # for c in comparison.compare_intervals(repetitions=100):
+    #     print(c)
 
     comparison.draw_intervals([0.1, 0.9])
