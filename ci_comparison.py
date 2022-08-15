@@ -54,30 +54,32 @@ class CompareIntervals:
         :param data: one sample
         :return:
         """
-        ci = {}
-        times = {}
-        new_methods = {'mean': ['ttest', 'wilcoxson'], 'median': ['wilcoxson', 'ci_quant_param', 'ci_quant_nonparam',
+        ci = defaultdict(list)
+        times = defaultdict(list)
+        new_methods = {'mean': ['ttest', 'wilcoxon'], 'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam',
                                                                   'maritz-jarrett'],
-                       'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'Maritz-Jarrett'],
+                       'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'corr': ['ci_corr_pearson', 'ci_corr_spearman']}
-        if self.statistic.__name__[-10] not in ['mean', 'median', 'std', 'percentile', 'corr']:
+        if self.statistic.__name__[-10:] not in ['mean', 'median', 'std', 'percentile', 'corr']:
             print(f'No known non-bootstrap methods to use for statistic {self.statistic.__name__}.')
             new_methods[self.statistic.__name__] = []
 
-        for method in new_methods[self.statistic.__name__[:-10]]:
+        for method in new_methods[self.statistic.__name__[-10:]]:
             if method == 'ttest':
                 stat = self.statistic(data)
                 se = np.std(data) / np.sqrt(self.n)
                 ci[method] = scipy.stats.t.ppf(self.alphas, df=self.n - 1, loc=stat, scale=se)
 
             elif method == 'wilcoxon':
+                # samo signed test, brez rankov
                 sorted_data = sorted(data) + [np.inf]       # inf for taking all points?
                 p = 0.5 if self.statistic.__name__ == 'median' else np.mean(data > self.statistic(data))  # TODO ??
                 # returning open intervals (-inf, alpha)
-                possible_intervals = abs(scipy.stats.binom.pmf(range(self.n + 1), self.n, p) -
-                                         np.array([0] * int(np.floor((10 + 1) / 2)) + [1] * int(np.ceil((10 + 1) / 2))))
+                possible_intervals = scipy.stats.binom.cdf(range(self.n + 1), self.n, p)
                 # TODO interpolate (/use quantile function?) -> usklajevanje z ostalimi!!!
-                ci[method] = [sorted_data[int(np.sum(possible_intervals > a))] for a in self.alphas]
+                ci[method] = [sorted_data[int(np.sum(possible_intervals < a))] for a in self.alphas]
+
+                # signed_ranks = scipy.stats.rankdata(data) * np.sign(data)
 
             elif method in ['ci_quant_param', 'ci_quant_nonparam']:
                 quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[0])/100
@@ -120,7 +122,7 @@ class CompareIntervals:
         self.methods.extend(ci.keys())
         for m in ci.keys():
             if m not in self.computed_intervals:
-                self.computed_intervals[m] = [ci[m]]
+                self.computed_intervals[m] = {a: [c] for a, c in zip(self.alphas, ci[m])}
             else:
                 for i in range(len(self.alphas)):
                     self.computed_intervals[m][self.alphas[i]].append(ci[m][i])
@@ -203,6 +205,8 @@ class CompareIntervals:
         # compute non-bootstrap intervals
         non_bts = self.compute_non_bootstrap_intervals(data)
 
+        print({m: [self.computed_intervals[m][a][-1] for a in alphas_to_draw] for m in self.methods})
+
         # exact intervals calculation
         if not np.array([a in self.inverse_cdf for a in alphas_to_draw]).all():
             self.exact_interval_simulation(10000)
@@ -220,7 +224,7 @@ class CompareIntervals:
                     plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', label=method, color=col,
                                 alpha=0.75)
                 else:
-                    plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='--', color=col, alpha=0.75)
+                    plt.axvline(self.computed_intervals[method][alpha][-1], linestyle='-.', color=col, alpha=0.75)
 
         # draw exact intervals
         for e in exact_intervals:
@@ -266,33 +270,14 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 
 if __name__ == '__main__':
-    # data generation
-    np.random.seed(0)
-    n = 10
-    # NORMAL
-    # data = np.random.normal(5, 10, 100)
-    # GAMMA
-    data = np.random.gamma(shape=2, scale=3, size=n)
 
-    print(scipy.stats.binom.ppf(0.1, 10, 0.9).astype(int))
-
-    # other settings
     statistic = np.median
+    n = 20
     B = 1000
     alpha = 0.9
-    print(f'Original data statistic value: {statistic(data)}')
+    seed = 10
 
-    # exact intervals calculation:
-    # GAMMA
-    exact_simulation = [statistic(np.random.gamma(shape=2, scale=3, size=n)) for _ in range(100000)]
-    print(f'Simulated value: {statistic(exact_simulation)}, '
-          f'exact simulated CI: {np.quantile(exact_simulation, [(1 - alpha) / 2, 0.5 + alpha / 2])}')
-
-    # print('Exact theoretical CI', np.array(scipy.stats.gamma.interval(alpha=alpha, a=2 * n, scale=3)) / n) only mean
-
-    print('SKEW:', scipy.stats.skew(data))
-
-    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed']  # , 'double']
+    methods = ['percentile', 'basic']  # , 'bca', 'bc', 'standard', 'smoothed', 'double']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
@@ -304,7 +289,7 @@ if __name__ == '__main__':
     # INTERVAL COMPARISON
     alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
 
-    dgp = DGPNorm(0, 1, 3)
+    dgp = DGPNorm(seed, 1, 3)
 
     comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
     # for c in comparison.compare_intervals(repetitions=100):
