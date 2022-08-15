@@ -18,6 +18,7 @@ class Bootstrap:
         self.bootstrap_indices = np.empty(0)
         self.statistic_values = np.empty(0)
         self.statistic_values_noise = np.empty(0)
+        self.implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed', 'double']
         # sampling method?
         # CI method?
 
@@ -170,8 +171,7 @@ class Bootstrap:
             return np.quantile(self.statistic_values, new_quantiles)
 
         else:
-            implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed', 'double']
-            raise ValueError(f'This method is not supported, choose between {implemented_methods}.')
+            raise ValueError(f'This method is not supported, choose between {self.implemented_methods}.')
 
     def studentized_error_calculation(self):
         # TODO
