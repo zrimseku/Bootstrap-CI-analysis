@@ -29,8 +29,8 @@ class DGPNorm(DGP):
         self.true_statistics['mean'] = loc
         self.true_statistics['median'] = loc
         self.true_statistics['std'] = scale
-        self.true_statistics['5_percentile'] = loc - 1.645 * scale
-        self.true_statistics['95_percentile'] = loc + 1.645 * scale
+        self.true_statistics['percentile_5'] = loc - 1.645 * scale
+        self.true_statistics['percentile_95'] = loc + 1.645 * scale
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
@@ -45,8 +45,8 @@ class DGPExp(DGP):
         self.true_statistics['mean'] = scale
         self.true_statistics['median'] = scale * np.log(2)
         self.true_statistics['std'] = scale ** 2
-        self.true_statistics['5_percentile'] = scale * np.log(20/19)
-        self.true_statistics['95_percentile'] = scale * np.log(20)
+        self.true_statistics['percentile_5'] = scale * np.log(20/19)
+        self.true_statistics['percentile_95'] = scale * np.log(20)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
@@ -61,8 +61,8 @@ class DGPBeta(DGP):
         self.beta = beta
         self.true_statistics['mean'] = alpha / (alpha + beta)
         self.true_statistics['std'] = alpha * beta / (alpha + beta) ** 2 / (alpha + beta + 1)
-        self.true_statistics['5_percentile'] = scipy.stats.beta.ppf(0.05, alpha, beta)
-        self.true_statistics['95_percentile'] = scipy.stats.beta.ppf(0.95, alpha, beta)
+        self.true_statistics['percentile_5'] = scipy.stats.beta.ppf(0.05, alpha, beta)
+        self.true_statistics['percentile_95'] = scipy.stats.beta.ppf(0.95, alpha, beta)
         self.true_statistics['median'] = scipy.stats.beta.ppf(0.5, alpha, beta)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
@@ -79,8 +79,8 @@ class DGPLogNorm(DGP):
         self.true_statistics['mean'] = np.exp(mean + (sigma ** 2) / 2)
         self.true_statistics['median'] = np.exp(mean)
         self.true_statistics['std'] = (np.exp(2 * mean + sigma ** 2) * (np.exp(sigma ** 2) - 1)) ** 0.5
-        self.true_statistics['5_percentile'] = np.exp(mean - 1.645 * sigma)
-        self.true_statistics['95_percentile'] = np.exp(mean + 1.645 * sigma)
+        self.true_statistics['percentile_5'] = np.exp(mean - 1.645 * sigma)
+        self.true_statistics['percentile_95'] = np.exp(mean + 1.645 * sigma)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
@@ -96,8 +96,8 @@ class DGPLaplace(DGP):
         self.true_statistics['mean'] = loc
         self.true_statistics['median'] = loc
         self.true_statistics['std'] = scale * 2**0.5
-        self.true_statistics['5_percentile'] = loc + scale * np.log(0.1)
-        self.true_statistics['95_percentile'] = loc - scale * np.log(0.1)
+        self.true_statistics['percentile_5'] = loc + scale * np.log(0.1)
+        self.true_statistics['percentile_95'] = loc - scale * np.log(0.1)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
@@ -117,8 +117,8 @@ class DGPBernoulli(DGP):
         else:
             self.true_statistics['median'] = 1
         self.true_statistics['std'] = (p * (1 - p)) ** 0.5
-        self.true_statistics['5_percentile'] = p >= 0.95
-        self.true_statistics['95_percentile'] = p >= 0.05
+        self.true_statistics['percentile_5'] = p >= 0.95
+        self.true_statistics['percentile_95'] = p >= 0.05
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
@@ -134,8 +134,8 @@ class DGPCategorical(DGP):
         self.true_statistics['median'] = (pvals > 0.5).astype(float)
         self.true_statistics['median'][pvals == 0.5] = 0.5
         self.true_statistics['std'] = (pvals * (1 - pvals)) ** 0.5
-        self.true_statistics['5_percentile'] = (pvals >= 0.95).astype(int)
-        self.true_statistics['95_percentile'] = (pvals >= 0.05).astype(int)
+        self.true_statistics['percentile_5'] = (pvals >= 0.95).astype(int)
+        self.true_statistics['percentile_95'] = (pvals >= 0.05).astype(int)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size

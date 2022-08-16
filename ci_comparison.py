@@ -56,53 +56,53 @@ class CompareIntervals:
         """
         ci = defaultdict(list)
         times = defaultdict(list)
-        new_methods = {'mean': ['ttest', 'wilcoxon'], 'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam',
-                                                                  'maritz-jarrett'],
+        new_methods = {'mean': ['ttest', 'wilcoxon', 'sign'],
+                       'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'sign'],
                        'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'corr': ['ci_corr_pearson', 'ci_corr_spearman']}
-        if self.statistic.__name__[-10:] not in ['mean', 'median', 'std', 'percentile', 'corr']:
+        if self.statistic.__name__[:10] not in ['mean', 'median', 'std', 'percentile', 'corr']:
             print(f'No known non-bootstrap methods to use for statistic {self.statistic.__name__}.')
             new_methods[self.statistic.__name__] = []
 
-        for method in new_methods[self.statistic.__name__[-10:]]:
+        for method in new_methods[self.statistic.__name__[:10]]:
             if method == 'ttest':
                 stat = self.statistic(data)
                 se = np.std(data) / np.sqrt(self.n)
                 ci[method] = scipy.stats.t.ppf(self.alphas, df=self.n - 1, loc=stat, scale=se)
 
-            elif method == 'wilcoxon':
-                # samo signed test, brez rankov
-                sorted_data = sorted(data) + [np.inf]       # inf for taking all points?
-                p = 0.5 if self.statistic.__name__ == 'median' else np.mean(data > self.statistic(data))  # TODO ??
+            elif method == 'sign':
+                sorted_data = sorted(data) + [np.inf]  # inf for taking all points?
+                p = 0.5  # if self.statistic.__name__ == 'median' else np.mean(data > self.statistic(data))  # TODO ??
                 # returning open intervals (-inf, alpha)
                 possible_intervals = scipy.stats.binom.cdf(range(self.n + 1), self.n, p)
                 # TODO interpolate (/use quantile function?) -> usklajevanje z ostalimi!!!
                 ci[method] = [sorted_data[int(np.sum(possible_intervals < a))] for a in self.alphas]
 
-                # signed_ranks = scipy.stats.rankdata(data) * np.sign(data)
+            elif method == 'wilcoxon':
+                signed_ranks = scipy.stats.rankdata(data) * np.sign(data)
 
             elif method in ['ci_quant_param', 'ci_quant_nonparam']:
-                quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[0])/100
+                quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[1])/100
 
                 if method == 'ci_quant_param':
                     m = np.mean(data)
                     s = np.std(data)
                     z = (np.quantile(data, quant, method='inverted_cdf') - m) / s
                     nc = -z * np.sqrt(self.n)
-                    ci[method] = m - scipy.stats.nct.ppf(self.alphas, nc=nc, df=self.n - 1) * s / np.sqrt(n)
+                    ci[method] = m - scipy.stats.nct.ppf(1 - self.alphas, nc=nc, df=self.n - 1) * s / np.sqrt(n)
 
                 elif method == 'ci_quant_nonparam':
                     sorted_data = np.array(sorted(data) + [np.inf])
                     ci[method] = sorted_data[scipy.stats.binom.ppf(self.alphas, self.n, quant).astype(int)]
 
             elif method == 'maritz-jarrett':
-                quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[0])/100
+                quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[1])/100
                 ci[method] = [scipy.stats.mstats.mquantiles_cimj(data, prob=quant, alpha=abs(2*a-1))[int(a > 0.5)][0]
                               for a in self.alphas]
 
             elif method == 'chi_sq':
                 s = np.std(data)
-                qchisq = scipy.stats.chi2.ppf(self.alphas, self.n - 1)
+                qchisq = scipy.stats.chi2.ppf(1 - self.alphas, self.n - 1)
                 ci[method] = np.sqrt((self.n - 1) * s ** 2 / qchisq)
 
             elif method[:7] == 'ci_corr':
@@ -153,7 +153,7 @@ class CompareIntervals:
         stat_original = np.array(stat_original)
 
         # calculation with non-bootstrap methods
-        non_bts = self.compute_non_bootstrap_intervals(data)
+        self.compute_non_bootstrap_intervals(data)
 
         # exact intervals
         self.computed_intervals['exact'] = {a: stat_original - self.inverse_cdf[a] for a in self.alphas}
@@ -203,7 +203,7 @@ class CompareIntervals:
         bts = self.compute_bootstrap_intervals(data)
 
         # compute non-bootstrap intervals
-        non_bts = self.compute_non_bootstrap_intervals(data)
+        self.compute_non_bootstrap_intervals(data)
 
         print({m: [self.computed_intervals[m][a][-1] for a in alphas_to_draw] for m in self.methods})
 
@@ -269,27 +269,42 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
         print('_____________________________________________________________________')
 
 
+def corr(data):
+    c = np.corrcoef(data, rowvar=False)
+    return c[0, 1]
+
+
+def percentile_5(data):
+    return np.quantile(data, 0.05)
+
+
+def percentile_95(data):
+    return np.quantile(data, 0.95)
+
+
 if __name__ == '__main__':
 
-    statistic = np.median
-    n = 20
+    statistic = np.std
+    n = 500
     B = 1000
     alpha = 0.9
-    seed = 10
+    seed = 0
+    alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
 
     methods = ['percentile', 'basic']  # , 'bca', 'bc', 'standard', 'smoothed', 'double']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
-    # our = Bootstrap(data, statistic)
+    # our
+    # = Bootstrap(data, statistic)
     # our_ci = our.ci(coverage=alpha, nr_bootstrap_samples=B, method='percentile', seed=0)
     # our.jackknife_after_bootstrap([lambda x: np.quantile(x, 0.05), lambda x: np.quantile(x, 0.1), np.mean, np.median,
     #                                lambda x: np.quantile(x, 0.9), lambda x: np.quantile(x, 0.95)])
 
     # INTERVAL COMPARISON
-    alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
 
-    dgp = DGPNorm(seed, 1, 3)
+    dgp = DGPNorm(seed, 0, 1)
+    # dgp = DGPBiNorm(seed, np.array([1, 20]), np.array([[3, 2], [2, 2]]))
 
     comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
     # for c in comparison.compare_intervals(repetitions=100):
