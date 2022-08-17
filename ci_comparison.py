@@ -17,13 +17,14 @@ from R_functions import psignrank_range
 class CompareIntervals:
 
     def __init__(self, statistic: callable, methods: list[str], data_generator: DGP, n: int, b: int,
-                 alphas: list[float]):
+                 alphas: list[float], quantile_type='median_unbiased'):
         self.statistic = statistic
         self.methods = methods
         self.dgp = data_generator
         self.n = n
         self.b = b
         self.alphas = np.array(alphas)  # we are interested in one sided intervals, two sided can be computed from them
+        self.quantile_type = quantile_type
         self.computed_intervals = {m: {a: [] for a in alphas} for m in methods}  # add all computed intervals
         self.inverse_cdf = {}
         self.times = defaultdict(list)
@@ -42,7 +43,7 @@ class CompareIntervals:
                 continue
             for alpha in self.alphas:
                 t = time.time()
-                ci = bts.ci(coverage=alpha, side='one', method=method)
+                ci = bts.ci(coverage=alpha, side='one', method=method, quantile_type=self.quantile_type)
                 self.times[method].append(time.time() - t)
                 self.computed_intervals[method][alpha].append(ci[0])
             # print('finished', method)
@@ -76,7 +77,7 @@ class CompareIntervals:
                 p = 0.5  # if self.statistic.__name__ == 'median' else np.mean(data > self.statistic(data))  # TODO ??
                 # returning open intervals (-inf, alpha)
                 possible_intervals = scipy.stats.binom.cdf(range(self.n + 1), self.n, p)
-                # TODO interpolate (/use quantile function?) -> usklajevanje z ostalimi!!!
+                # TODO interpolate -> usklajevanje z ostalimi!!!
                 ci[method] = [sorted_data[int(np.sum(possible_intervals < a))] for a in self.alphas]
                 self.times[method].append(time.time() - t)
 
@@ -98,7 +99,7 @@ class CompareIntervals:
                 if method == 'ci_quant_param':
                     m = np.mean(data)
                     s = np.std(data)
-                    z = (np.quantile(data, quant, method='inverted_cdf') - m) / s
+                    z = (np.quantile(data, quant, method=self.quantile_type) - m) / s
                     nc = -z * np.sqrt(self.n)
                     ci[method] = m - scipy.stats.nct.ppf(1 - self.alphas, nc=nc, df=self.n - 1) * s / np.sqrt(n)
 
@@ -139,8 +140,9 @@ class CompareIntervals:
             else:
                 raise ValueError('Wrong method!!')      # should never happen, just here as a code check
 
-        self.methods.extend(ci.keys())
         for m in ci.keys():
+            if m not in self.methods:
+                self.methods.append(m)
             if m not in self.computed_intervals:
                 self.computed_intervals[m] = {a: [c] for a, c in zip(self.alphas, ci[m])}
             else:
@@ -156,7 +158,7 @@ class CompareIntervals:
         distribution = stat_values - self.dgp.get_true_value(self.statistic.__name__)
 
         # inverse cdf that is used for exact interval calculation
-        self.inverse_cdf = {a: np.quantile(distribution, 1 - a) for a in self.alphas}
+        self.inverse_cdf = {a: np.quantile(distribution, 1 - a, method=self.quantile_type) for a in self.alphas}
 
     def compare_intervals(self, repetitions, length=None):
         true_statistic_value = self.dgp.get_true_value(self.statistic.__name__)
@@ -167,12 +169,12 @@ class CompareIntervals:
 
         # calculation with different bootstrap methods
         for r in tqdm(range(repetitions)):
+            # calculation with non-bootstrap methods
+            self.compute_non_bootstrap_intervals(data[r])
+            # calculation with different bootstrap methods
             bts = self.compute_bootstrap_intervals(data[r])
             stat_original.append(bts.original_statistic_value)
         stat_original = np.array(stat_original)
-
-        # calculation with non-bootstrap methods
-        self.compute_non_bootstrap_intervals(data)
 
         # exact intervals
         self.computed_intervals['exact'] = {a: stat_original - self.inverse_cdf[a] for a in self.alphas}
@@ -227,7 +229,7 @@ class CompareIntervals:
         # compute non-bootstrap intervals
         self.compute_non_bootstrap_intervals(data)
 
-        print({m: [self.computed_intervals[m][a][-1] for a in alphas_to_draw] for m in self.methods})
+        # print({m: [self.computed_intervals[m][a][-1] for a in alphas_to_draw] for m in self.methods})
 
         # exact intervals calculation
         if not np.array([a in self.inverse_cdf for a in alphas_to_draw]).all():
@@ -297,16 +299,16 @@ def corr(data):
 
 
 def percentile_5(data):
-    return np.quantile(data, 0.05)
+    return np.quantile(data, 0.05, method='median_unbiased')
 
 
 def percentile_95(data):
-    return np.quantile(data, 0.95)
+    return np.quantile(data, 0.95, method='median_unbiased')
 
 
 if __name__ == '__main__':
 
-    statistic = np.median
+    statistic = np.mean
     n = 500
     B = 1000
     alpha = 0.9
@@ -329,9 +331,9 @@ if __name__ == '__main__':
     # dgp = DGPBiNorm(seed, np.array([1, 20]), np.array([[3, 2], [2, 2]]))
 
     comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
-    for c, name in zip(comparison.compare_intervals(repetitions=100),
+    for cm, name in zip(comparison.compare_intervals(repetitions=100),
                        ['coverages', 'times_stats', 'length_stats', 'shape_stats', 'distance_from_exact_stats']):
-        print(name, c)
+        print(name, cm)
 
     comparison.draw_intervals([0.1, 0.9])
 

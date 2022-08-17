@@ -56,7 +56,7 @@ class Bootstrap:
     #  return them?) Polepšaj kodo uglavnem
 
     def ci(self, coverage: float, side: str = 'two', method: str = 'bca', nr_bootstrap_samples: int = None,
-           seed: int = None, sampling: str = 'nonparametric',
+           seed: int = None, sampling: str = 'nonparametric', quantile_type: str = 'median_unbiased',
            sampling_args: dict = {'kernel': 'norm', 'width': None}) -> np.array:
         """
         Returns confidence intervals.
@@ -66,6 +66,7 @@ class Bootstrap:
         :param nr_bootstrap_samples:
         :param seed:
         :param sampling:
+        :param quantile_type:
         :param sampling_args:
         :return:
         """
@@ -86,7 +87,7 @@ class Bootstrap:
             assert ValueError("Choose between 'one' and 'two'-sided intervals when setting parameter side.")
 
         if method == 'percentile':
-            return np.quantile(self.statistic_values, quantile)
+            return np.quantile(self.statistic_values, quantile, method=quantile_type)
 
         elif method == 'standard':
             sd = np.std(self.statistic_values)
@@ -94,10 +95,10 @@ class Bootstrap:
 
         elif method == 'basic':
             if len(quantile) == 2:
-                tails = np.quantile(self.statistic_values, quantile[::-1])
+                tails = np.quantile(self.statistic_values, quantile[::-1], method=quantile_type)
             else:
                 # a se v primeru enostranskega basic 90% gleda 2 * ocena - 10%?
-                tails = np.quantile(self.statistic_values, 1 - np.array(quantile))
+                tails = np.quantile(self.statistic_values, 1 - np.array(quantile), method=quantile_type)
 
             return 2 * self.original_statistic_value - tails
 
@@ -118,16 +119,16 @@ class Bootstrap:
             # print('quant', z_alpha)
             # print('norm ppf bias', norm.ppf(bias))
             # print('corrected', corrected)
-            return np.quantile(self.statistic_values, corrected)
+            return np.quantile(self.statistic_values, corrected, method=quantile_type)
 
         elif method == 'studentized':   # bootstrap-t, add more possible names for all that have multiple names?
             standard_errors = self.studentized_error_calculation()
             t_samples = (self.statistic_values - self.original_statistic_value) / standard_errors
             se = np.std(self.statistic_values)      # tole naj bi bil se na original podatkih, kako to dobiš avtomatsko?
             # print(self.original_statistic_value)
-            # print(np.quantile(t_samples, quantile) * se)
+            # print(np.quantile(t_samples, quantile) * se, method=quantile_type)
             # print((self.original_statistic_value + np.quantile(t_samples, quantile) * se)) boljši rezultati, ni isto
-            return (self.original_statistic_value - np.quantile(t_samples, quantile) * se)[::-1]
+            return (self.original_statistic_value - np.quantile(t_samples, quantile, method=quantile_type) * se)[::-1]
 
         elif method == 'smoothed':
             # TODO smarter automatic setting of parameters
@@ -138,7 +139,8 @@ class Bootstrap:
                 # h = abs(np.mean(ordered_samples[1:] - ordered_samples[:-1]))
 
                 # rule of thumb width selection (we can improve it with AMISE/MISE approximation if needed)
-                iqr = np.quantile(self.statistic_values, 0.75) - np.quantile(self.statistic_values, 0.25)
+                iqr = np.quantile(self.statistic_values, 0.75, method=quantile_type) - \
+                      np.quantile(self.statistic_values, 0.25, method=quantile_type)
                 h = 0.9 * min(np.std(self.statistic_values), iqr / 1.34) * (self.n ** -0.2)
             else:
                 h = sampling_args['width']
@@ -151,7 +153,7 @@ class Bootstrap:
                 print(f"Unknown kernel: {sampling_args['kernel']}, using percentile method.")
 
             self.evaluate_statistic(noise)
-            return np.quantile(self.statistic_values_noise, quantile)
+            return np.quantile(self.statistic_values_noise, quantile, method=quantile_type)
 
         elif method == 'double':
             # get percentiles of original value in inner bootstrap samples
@@ -163,12 +165,11 @@ class Bootstrap:
                 t_quantile = np.quantile(t, coverage)
                 new_quantiles = [0.5 - t_quantile, 0.5 + t_quantile]
             else:
-                new_quantiles = np.quantile(sample_quantiles, quantile)
+                new_quantiles = np.quantile(sample_quantiles, quantile, method=quantile_type)
             # TODO kasneje: ta coverage iz drugih metod, ne samo percentile - lahko naredimo cel bootstrap iterativen?
-            # TODO za dvostranskega popravimo obe strani za isto
             # TODO iterative bootstrap (možno več iteracij)
             print('New quantiles: ', new_quantiles, f'({quantile})')
-            return np.quantile(self.statistic_values, new_quantiles)
+            return np.quantile(self.statistic_values, new_quantiles, method=quantile_type)
 
         else:
             raise ValueError(f'This method is not supported, choose between {self.implemented_methods}.')
