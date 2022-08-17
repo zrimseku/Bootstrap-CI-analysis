@@ -41,7 +41,6 @@ class CompareIntervals:
             if method not in bts.implemented_methods:
                 continue
             for alpha in self.alphas:
-                # ce zelimo dodatne (klasicne) metode en if stavek tuki
                 t = time.time()
                 ci = bts.ci(coverage=alpha, side='one', method=method)
                 self.times[method].append(time.time() - t)
@@ -51,12 +50,10 @@ class CompareIntervals:
 
     def compute_non_bootstrap_intervals(self, data: np.array):
         """
-
-        :param data: one sample
-        :return:
+        Computes CI with non-bootstrap methods, that can be applied to the statistic in use.
+        :param data: array containing one sample
         """
         ci = defaultdict(list)
-        times = defaultdict(list)
         new_methods = {'mean': ['ttest', 'wilcoxon', 'sign'],
                        'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'sign'],
                        'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
@@ -67,20 +64,24 @@ class CompareIntervals:
 
         for method in new_methods[self.statistic.__name__[:10]]:
             if method == 'ttest':
+                t = time.time()
                 stat = self.statistic(data)
                 se = np.std(data) / np.sqrt(self.n)
                 ci[method] = scipy.stats.t.ppf(self.alphas, df=self.n - 1, loc=stat, scale=se)
+                self.times[method].append(time.time() - t)
 
             elif method == 'sign':
+                t = time.time()
                 sorted_data = sorted(data) + [np.inf]  # inf for taking all points?
                 p = 0.5  # if self.statistic.__name__ == 'median' else np.mean(data > self.statistic(data))  # TODO ??
                 # returning open intervals (-inf, alpha)
                 possible_intervals = scipy.stats.binom.cdf(range(self.n + 1), self.n, p)
                 # TODO interpolate (/use quantile function?) -> usklajevanje z ostalimi!!!
                 ci[method] = [sorted_data[int(np.sum(possible_intervals < a))] for a in self.alphas]
+                self.times[method].append(time.time() - t)
 
             elif method == 'wilcoxon':
-                # signed_ranks = scipy.stats.rankdata(data) * np.sign(data)
+                t = time.time()
                 m = int(self.n * (self.n + 1) / 2)
                 k = int(m/2)                             # looking only at half points for faster calculation
                 conf_half = psignrank_range(k, self.n)
@@ -88,8 +89,10 @@ class CompareIntervals:
                 w_sums = sorted([(data[i] + data[j]) / 2 for i in range(self.n) for j in range(i, self.n)])
                 from_start = [sum(conf < a) for a in self.alphas]
                 ci[method] = [w_sums[f] for f in from_start]
+                self.times[method].append(time.time() - t)
 
             elif method in ['ci_quant_param', 'ci_quant_nonparam']:
+                t = time.time()
                 quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[1])/100
 
                 if method == 'ci_quant_param':
@@ -100,20 +103,28 @@ class CompareIntervals:
                     ci[method] = m - scipy.stats.nct.ppf(1 - self.alphas, nc=nc, df=self.n - 1) * s / np.sqrt(n)
 
                 elif method == 'ci_quant_nonparam':
+                    t = time.time()
                     sorted_data = np.array(sorted(data) + [np.inf])
                     ci[method] = sorted_data[scipy.stats.binom.ppf(self.alphas, self.n, quant).astype(int)]
 
+                self.times[method].append(time.time() - t)
+
             elif method == 'maritz-jarrett':
+                t = time.time()
                 quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[1])/100
                 ci[method] = [scipy.stats.mstats.mquantiles_cimj(data, prob=quant, alpha=abs(2*a-1))[int(a > 0.5)][0]
                               for a in self.alphas]
+                self.times[method].append(time.time() - t)
 
             elif method == 'chi_sq':
+                t = time.time()
                 s = np.std(data)
                 qchisq = scipy.stats.chi2.ppf(1 - self.alphas, self.n - 1)
                 ci[method] = np.sqrt((self.n - 1) * s ** 2 / qchisq)
+                self.times[method].append(time.time() - t)
 
             elif method[:7] == 'ci_corr':
+                t = time.time()
                 if method == 'ci_corr_pearson':
                     in1 = data[:, 0]
                     in2 = data[:, 1]
@@ -123,6 +134,7 @@ class CompareIntervals:
 
                 res = scipy.stats.pearsonr(in1, in2, alternative='less')
                 ci[method] = [res.confidence_interval(a).high for a in self.alphas]
+                self.times[method].append(time.time() - t)
 
             else:
                 raise ValueError('Wrong method!!')      # should never happen, just here as a code check
@@ -134,7 +146,6 @@ class CompareIntervals:
             else:
                 for i in range(len(self.alphas)):
                     self.computed_intervals[m][self.alphas[i]].append(ci[m][i])
-            self.times[m].append(times[m])
 
     def exact_interval_simulation(self, repetitions: int):
         stat_values = np.empty(repetitions)
@@ -156,7 +167,7 @@ class CompareIntervals:
 
         # calculation with different bootstrap methods
         for r in tqdm(range(repetitions)):
-            bts, times = self.compute_bootstrap_intervals(data[r])
+            bts = self.compute_bootstrap_intervals(data[r])
             stat_original.append(bts.original_statistic_value)
         stat_original = np.array(stat_original)
 
@@ -201,7 +212,10 @@ class CompareIntervals:
         shape_stats = {method: {'mean': np.mean(shapes[method]), 'std': np.std(shapes[method])}
                        for method in self.methods}
 
-        return self.coverages, length_stats, shape_stats, distance_from_exact_stats
+        times_stats = {method: {'mean': np.mean(self.times[method]), 'std': np.std(self.times[method])}
+                       for method in self.methods}
+
+        return self.coverages, times_stats, length_stats, shape_stats, distance_from_exact_stats
 
     def draw_intervals(self, alphas_to_draw: list[float]):
         data = self.dgp.sample(sample_size=self.n)
@@ -296,7 +310,7 @@ if __name__ == '__main__':
     n = 500
     B = 1000
     alpha = 0.9
-    seed = 0
+    seed = 50
     alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
 
     methods = ['percentile', 'basic']  # , 'bca', 'bc', 'standard', 'smoothed', 'double']
@@ -315,8 +329,9 @@ if __name__ == '__main__':
     # dgp = DGPBiNorm(seed, np.array([1, 20]), np.array([[3, 2], [2, 2]]))
 
     comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
-    # for c in comparison.compare_intervals(repetitions=100):
-    #     print(c)
+    for c, name in zip(comparison.compare_intervals(repetitions=100),
+                       ['coverages', 'times_stats', 'length_stats', 'shape_stats', 'distance_from_exact_stats']):
+        print(name, c)
 
     comparison.draw_intervals([0.1, 0.9])
 
