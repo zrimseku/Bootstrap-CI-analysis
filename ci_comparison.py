@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+import pandas as pd
 import scipy
 from tqdm import tqdm
 from scipy.stats import norm
@@ -8,6 +9,8 @@ from scipy.stats import bootstrap as boot_sci
 from arch.bootstrap import IIDBootstrap as boot_arch
 import matplotlib.pyplot as plt
 from collections import defaultdict
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from ci_methods import Bootstrap
 from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPBernoulli, DGPCategorical
@@ -25,7 +28,7 @@ class CompareIntervals:
         self.b = b
         self.alphas = np.array(alphas)  # we are interested in one sided intervals, two sided can be computed from them
         self.quantile_type = quantile_type
-        self.computed_intervals = {m: {a: [] for a in alphas} for m in methods}  # add all computed intervals
+        self.computed_intervals = {m: defaultdict(list) for m in methods}       # will add all computed intervals
         self.inverse_cdf = {}
         self.times = defaultdict(list)
         self.coverages = {}
@@ -41,11 +44,11 @@ class CompareIntervals:
             # TODO: avoid new computations for each alpha?
             if method not in bts.implemented_methods:
                 continue
+            t = time.time()
             for alpha in self.alphas:
-                t = time.time()
                 ci = bts.ci(coverage=alpha, side='one', method=method, quantile_type=self.quantile_type)
-                self.times[method].append(time.time() - t)
                 self.computed_intervals[method][alpha].append(ci[0])
+            self.times[method].append(time.time() - t)
             # print('finished', method)
         return bts
 
@@ -113,6 +116,7 @@ class CompareIntervals:
             elif method == 'maritz-jarrett':
                 t = time.time()
                 quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[1])/100
+                # can't choose 0.5
                 ci[method] = [scipy.stats.mstats.mquantiles_cimj(data, prob=quant, alpha=abs(2*a-1))[int(a > 0.5)][0]
                               for a in self.alphas]
                 self.times[method].append(time.time() - t)
@@ -144,7 +148,7 @@ class CompareIntervals:
             if m not in self.methods:
                 self.methods.append(m)
             if m not in self.computed_intervals:
-                self.computed_intervals[m] = {a: [c] for a, c in zip(self.alphas, ci[m])}
+                self.computed_intervals[m] = defaultdict(list, {a: [c] for a, c in zip(self.alphas, ci[m])})
             else:
                 for i in range(len(self.alphas)):
                     self.computed_intervals[m][self.alphas[i]].append(ci[m][i])
@@ -192,13 +196,14 @@ class CompareIntervals:
                                               for alpha in self.alphas} for method in self.methods}
 
         if length is not None:
-            low_alpha, high_alpha = [(1 - length) / 2, (length + 1) / 2]
+            low_alpha, high_alpha = [round((1 - length) / 2, 5), round((length + 1) / 2, 5)]
             if low_alpha not in self.alphas or high_alpha not in self.alphas:
-                raise ValueError(f"Length of {length} CI can't be calculated, because we don't have calculations for"
-                                 f"corresponding alphas.")
+                raise ValueError(f"Length of {length} CI can't be calculated, because we don't have calculations for "
+                                 f"the corresponding alphas.")
         else:
             low_alpha, high_alpha = [min(self.alphas), max(self.alphas)]
-            print(f'Calculating lengths of {high_alpha - low_alpha} CI, from {low_alpha} to {high_alpha} quantiles.')
+            print(f'Calculating lengths of {round(high_alpha - low_alpha, 5)} CI, '
+                  f'from {low_alpha} to {high_alpha} quantiles.')
 
         self.lengths = {method: np.array(self.computed_intervals[method][high_alpha][-repetitions:]) -
                                 np.array(self.computed_intervals[method][low_alpha][-repetitions:])
@@ -257,9 +262,75 @@ class CompareIntervals:
             else:
                 plt.axvline(e, linestyle=':', color='black', alpha=0.75)
 
-        plt.title(f'Interval {alphas_to_draw} for {self.statistic.__name__}, n = {self.n}, B = {self.b}')
+        plt.title(f'Interval {alphas_to_draw} for {self.statistic.__name__} of {type(self.dgp).__name__}, '
+                  f'n = {self.n}, B = {self.b}')
         plt.legend()
         plt.show()
+
+    def plot_results(self, repetitions, length=0.9):
+        res = self.compare_intervals(repetitions, length)
+
+        title = f'{self.statistic.__name__} of {type(self.dgp).__name__} (n = {self.n}, B = {self.b})'
+
+        # building long dataframes for seaborn use
+        cov_methods = list(self.methods)*len(self.alphas)
+        cov_alphas = np.repeat(self.alphas, len(self.methods))
+        coverage_df = pd.DataFrame({'method': cov_methods, 'alpha': cov_alphas,
+                                    'coverage': [self.coverages[m][a] for m, a in zip(cov_methods, cov_alphas)]})
+
+        sns.barplot(x="alpha", hue="method", y="coverage", data=coverage_df, hue_order=self.methods)
+
+        plt.axhline(y=self.alphas[0], xmin=0, xmax=1 / len(self.alphas), linestyle='--', color='gray', label='expected')
+        for i in range(1, len(self.alphas)):
+            plt.axhline(y=self.alphas[i], xmin=i/len(self.alphas), xmax=(i + 1)/len(self.alphas), linestyle='--',
+                        color='gray')
+
+        plt.legend(loc='upper left')
+        plt.title('True coverages of ' + title)
+        plt.show()
+
+        df_distance = pd.DataFrame({'method': np.repeat(cov_methods, repetitions),
+                                    'alpha': np.repeat(cov_alphas, repetitions),
+                                 # 'length': np.concatenate([self.lengths[m][a][-repetitions:]
+                                 #                           for m, a in zip(cov_methods, cov_alphas)]),
+                                    'distance from exact': np.concatenate([self.distances_from_exact[m][a][-repetitions:]
+                                                                           for m, a in zip(cov_methods, cov_alphas)]),
+                                 # 'time': np.concatenate([self.times[m][a][-repetitions:]
+                                 #                         for m, a in zip(cov_methods, cov_alphas)])
+                                    })
+
+        plt.figure(figsize=(15, 6))
+        sns.boxplot(x="alpha", hue="method", y="distance from exact", data=df_distance, hue_order=self.methods)
+        plt.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
+        plt.title('Distance from exact intervals for' + title)
+        plt.tight_layout()
+        plt.show()
+
+        df_length = pd.DataFrame({m: v[-repetitions:] for m, v in zip(self.lengths.keys(), self.lengths.values())})
+        df_times = pd.DataFrame({m: v[-repetitions:] for m, v in zip(self.times.keys(), self.times.values())})
+
+        ax = sns.boxplot(data=df_length, order=self.methods)
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=30)
+        plt.title(f'Lengths of {length} CI for ' + title)
+        plt.tight_layout()
+        plt.show()
+
+        # times are for all alphas combined TODO: divide them?
+        ax = sns.boxplot(data=df_times, order=self.methods)
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=30)
+        plt.title('Calculation times for ' + title)
+        plt.tight_layout()
+        plt.show()
+        # sns.barplot(x="alpha", hue="method", y="length", data=df_other, hue_order=self.methods, estimator=np.mean,
+        #             ci=95, ax=axs[1])
+        # sns.barplot(x="alpha", hue="method", y="time", data=df_other, hue_order=self.methods, estimator=np.mean,
+        #             ci=95, ax=axs[2])
+        #
+        # plt.legend(loc='upper left')
+        # plt.title('Comparison on ' + title)
+        # plt.show()
+
+        return res
 
 
 def compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha):
@@ -293,6 +364,10 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
         print('_____________________________________________________________________')
 
 
+def run_comparison():
+    pass
+
+
 def corr(data):
     c = np.corrcoef(data, rowvar=False)
     return c[0, 1]
@@ -308,12 +383,12 @@ def percentile_95(data):
 
 if __name__ == '__main__':
 
-    statistic = np.mean
-    n = 500
+    statistic = np.median
+    n = 50
     B = 1000
     alpha = 0.9
-    seed = 50
-    alphas = [0.05, 0.1, 0.5, 0.9, 0.95]
+    seed = 0
+    alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
 
     methods = ['percentile', 'basic']  # , 'bca', 'bc', 'standard', 'smoothed', 'double']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
@@ -331,7 +406,7 @@ if __name__ == '__main__':
     # dgp = DGPBiNorm(seed, np.array([1, 20]), np.array([[3, 2], [2, 2]]))
 
     comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
-    for cm, name in zip(comparison.compare_intervals(repetitions=100),
+    for cm, name in zip(comparison.plot_results(repetitions=100),
                        ['coverages', 'times_stats', 'length_stats', 'shape_stats', 'distance_from_exact_stats']):
         print(name, cm)
 
