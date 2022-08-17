@@ -11,6 +11,7 @@ from collections import defaultdict
 
 from ci_methods import Bootstrap
 from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPBernoulli, DGPCategorical
+from R_functions import psignrank_range
 
 
 class CompareIntervals:
@@ -79,7 +80,14 @@ class CompareIntervals:
                 ci[method] = [sorted_data[int(np.sum(possible_intervals < a))] for a in self.alphas]
 
             elif method == 'wilcoxon':
-                signed_ranks = scipy.stats.rankdata(data) * np.sign(data)
+                # signed_ranks = scipy.stats.rankdata(data) * np.sign(data)
+                m = int(self.n * (self.n + 1) / 2)
+                k = int(m/2)                             # looking only at half points for faster calculation
+                conf_half = psignrank_range(k, self.n)
+                conf = np.concatenate([conf_half, (1 - conf_half)[::-1]])
+                w_sums = sorted([(data[i] + data[j]) / 2 for i in range(self.n) for j in range(i, self.n)])
+                from_start = [sum(conf < a) for a in self.alphas]
+                ci[method] = [w_sums[f] for f in from_start]
 
             elif method in ['ci_quant_param', 'ci_quant_nonparam']:
                 quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[1])/100
@@ -284,7 +292,7 @@ def percentile_95(data):
 
 if __name__ == '__main__':
 
-    statistic = np.std
+    statistic = np.median
     n = 500
     B = 1000
     alpha = 0.9
@@ -311,3 +319,9 @@ if __name__ == '__main__':
     #     print(c)
 
     comparison.draw_intervals([0.1, 0.9])
+
+    # comparison = CompareIntervals(statistic, methods, dgp, 15, B, [0.025, 0.975] + alphas)
+    # comparison.compute_non_bootstrap_intervals(np.array([3.7, -4.7, 6.5, -6.9, -7.8, 8.7, 9.1, 10.1, 10.8, 13.6, 14.4, 15.6, 20.2, 22.4, 23.5]))
+    # print(comparison.computed_intervals)
+    # print({m: [comparison.computed_intervals[m][a][-1] for a in [0.025, 0.975]] for m in comparison.methods})
+
