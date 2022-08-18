@@ -104,6 +104,8 @@ class Bootstrap:
 
         elif method[:2] == 'bc':
             bias = np.mean(self.statistic_values < self.original_statistic_value)
+            bias = max(min(bias, 0.999), 0.001)     # TODO ugly hack if all values are less than original
+                                                    # (to not get infinite correction)
             # print('bias', bias)
             a = 0   # for BC method
 
@@ -131,7 +133,6 @@ class Bootstrap:
             return (self.original_statistic_value - np.quantile(t_samples, quantile, method=quantile_type) * se)[::-1]
 
         elif method == 'smoothed':
-            # TODO smarter automatic setting of parameters
             input_shape = self.original_sample[self.bootstrap_indices].shape
             if sampling_args['width'] is None:
                 # parameter set as mean difference of each coordinate between ordered samples - naive idea
