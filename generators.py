@@ -40,7 +40,7 @@ class DGPNorm(DGP):
         return np.random.normal(self.loc, self.scale, size=size)
 
     def describe(self):
-        return type(self).__name__ + str(self.loc) + str(self.scale)
+        return type(self).__name__ + '_' + str(self.loc) + '_' + str(self.scale)
 
 
 class DGPExp(DGP):
@@ -59,7 +59,7 @@ class DGPExp(DGP):
         return np.random.exponential(self.scale, size=size)
 
     def describe(self):
-        return type(self).__name__ + str(self.scale)
+        return type(self).__name__ + '_' + str(self.scale)
 
 
 class DGPBeta(DGP):
@@ -79,7 +79,7 @@ class DGPBeta(DGP):
         return np.random.beta(self.alpha, self.beta, size=size)
 
     def describe(self):
-        return type(self).__name__ + str(self.alpha) + str(self.beta)
+        return type(self).__name__ + '_' + str(self.alpha) + '_' + str(self.beta)
 
 
 class DGPLogNorm(DGP):
@@ -99,7 +99,7 @@ class DGPLogNorm(DGP):
         return np.random.lognormal(self.mean, self.sigma, size=size)
 
     def describe(self):
-        return type(self).__name__ + str(self.mean) + str(self.sigma)
+        return type(self).__name__ + '_' + str(self.mean) + '_' + str(self.sigma)
 
 
 class DGPLaplace(DGP):
@@ -119,7 +119,7 @@ class DGPLaplace(DGP):
         return np.random.laplace(self.loc, self.scale, size=size)
 
     def describe(self):
-        return type(self).__name__ + str(self.loc) + str(self.scale)
+        return type(self).__name__ + '_' + str(self.loc) + '_' + str(self.scale)
 
 
 class DGPBernoulli(DGP):
@@ -143,7 +143,7 @@ class DGPBernoulli(DGP):
         return np.random.binomial(1, self.p, size=size)
 
     def describe(self):
-        return type(self).__name__ + str(self.p)
+        return type(self).__name__ + '_' + str(self.p)
 
 
 class DGPCategorical(DGP):
@@ -163,7 +163,7 @@ class DGPCategorical(DGP):
         return np.random.multinomial(1, self.pvals, size=size)
 
     def describe(self):
-        return type(self).__name__ + str(self.pvals)
+        return type(self).__name__ + '_' + str(self.pvals)
 
 
 class DGPBiNorm(DGP):
@@ -184,5 +184,6 @@ class DGPBiNorm(DGP):
         return np.random.multivariate_normal(self.mean, self.cov, size=size)
 
     def describe(self):
-        return type(self).__name__ + str(self.mean) + str(self.cov)
+        return type(self).__name__ + '_'.join([str(par) for par in [self.mean[0], self.mean[1], self.cov[0, 0],
+                                                                    self.cov[0, 1], self.cov[1, 1]]])
 
