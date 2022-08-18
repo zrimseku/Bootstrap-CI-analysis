@@ -389,6 +389,9 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
     dfs_comb = [coverage_df_comb, df_length_comb, df_times_comb, df_distance_comb]
     for dgp in dgps:
         for statistic in statistics:
+            if (statistic.__name__ == 'corr' and type(dgp).__name__ != 'DGPBiNorm') or \
+                    (type(dgp).__name__ == 'DGPBiNorm' and statistic.__name__[:10] == 'percentile'):
+                continue
             for n in ns:
                 for B in Bs:
                     comparison = CompareIntervals(statistic, methods.copy(), dgp, n, B, alphas.copy())
@@ -465,7 +468,9 @@ if __name__ == '__main__':
     # print(comparison.computed_intervals)
     # print({m: [comparison.computed_intervals[m][a][-1] for a in [0.025, 0.975]] for m in comparison.methods})
 
-    dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1)]
+    dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5), DGPLaplace(seed, 0, 1),
+            DGPCategorical(seed, np.array([0.1, 0.3, 0.5, 0.1])), DGPLogNorm(seed, 0, 1),
+            DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
     ns = [5, 10, 20, 50, 100]
     Bs = [10, 100, 1000, 10000]
