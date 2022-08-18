@@ -19,10 +19,13 @@ class DGP:
                              f"initialization.")
         return self.true_statistics[statistic_name]
 
+    def describe(self):
+        return type(self).__name__
+
 
 class DGPNorm(DGP):
 
-    def __init__(self, seed: int, loc: float, scale: float, true_statistics: dict = {}):
+    def __init__(self, seed: int, loc: float = 0, scale: float = 1, true_statistics: dict = {}):
         super(DGPNorm, self).__init__(seed, true_statistics)
         self.loc = loc
         self.scale = scale
@@ -36,10 +39,13 @@ class DGPNorm(DGP):
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
         return np.random.normal(self.loc, self.scale, size=size)
 
+    def describe(self):
+        return type(self).__name__ + str(self.loc) + str(self.scale)
+
 
 class DGPExp(DGP):
 
-    def __init__(self, seed: int, scale: float, true_statistics: dict = {}):
+    def __init__(self, seed: int, scale: float = 1, true_statistics: dict = {}):
         super(DGPExp, self).__init__(seed, true_statistics)
         self.scale = scale                      # 1/lambda
         self.true_statistics['mean'] = scale
@@ -52,10 +58,13 @@ class DGPExp(DGP):
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
         return np.random.exponential(self.scale, size=size)
 
+    def describe(self):
+        return type(self).__name__ + str(self.scale)
+
 
 class DGPBeta(DGP):
 
-    def __init__(self, seed: int, alpha: float, beta: float, true_statistics: dict = {}):
+    def __init__(self, seed: int, alpha: float = 1, beta: float = 1, true_statistics: dict = {}):
         super(DGPBeta, self).__init__(seed, true_statistics)
         self.alpha = alpha
         self.beta = beta
@@ -68,6 +77,9 @@ class DGPBeta(DGP):
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
         return np.random.beta(self.alpha, self.beta, size=size)
+
+    def describe(self):
+        return type(self).__name__ + str(self.alpha) + str(self.beta)
 
 
 class DGPLogNorm(DGP):
@@ -86,6 +98,9 @@ class DGPLogNorm(DGP):
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
         return np.random.lognormal(self.mean, self.sigma, size=size)
 
+    def describe(self):
+        return type(self).__name__ + str(self.mean) + str(self.sigma)
+
 
 class DGPLaplace(DGP):
 
@@ -102,6 +117,9 @@ class DGPLaplace(DGP):
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
         return np.random.laplace(self.loc, self.scale, size=size)
+
+    def describe(self):
+        return type(self).__name__ + str(self.loc) + str(self.scale)
 
 
 class DGPBernoulli(DGP):
@@ -124,6 +142,9 @@ class DGPBernoulli(DGP):
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
         return np.random.binomial(1, self.p, size=size)
 
+    def describe(self):
+        return type(self).__name__ + str(self.p)
+
 
 class DGPCategorical(DGP):
 
@@ -140,6 +161,9 @@ class DGPCategorical(DGP):
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
         return np.random.multinomial(1, self.pvals, size=size)
+
+    def describe(self):
+        return type(self).__name__ + str(self.pvals)
 
 
 class DGPBiNorm(DGP):
@@ -158,4 +182,7 @@ class DGPBiNorm(DGP):
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
         return np.random.multivariate_normal(self.mean, self.cov, size=size)
+
+    def describe(self):
+        return type(self).__name__ + str(self.mean) + str(self.cov)
 
