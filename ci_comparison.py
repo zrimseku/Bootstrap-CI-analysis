@@ -157,12 +157,18 @@ class CompareIntervals:
                     self.computed_intervals[m][self.alphas[i]].append(ci[m][i])
 
     def exact_interval_simulation(self, repetitions: int):
-        stat_values = np.empty(repetitions)
+        true_val = self.dgp.get_true_value(self.statistic.__name__)
+
+        if np.size(true_val) == 1:
+            stat_values = np.empty(repetitions)
+        else:
+            stat_values = np.empty((repetitions, np.size(true_val)))
+
         data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
         for r in range(repetitions):
             stat_values[r] = self.statistic(data[r])
 
-        distribution = stat_values - self.dgp.get_true_value(self.statistic.__name__)
+        distribution = stat_values - true_val
 
         # inverse cdf that is used for exact interval calculation
         self.inverse_cdf = {a: np.quantile(distribution, 1 - a, method=self.quantile_type) for a in self.alphas}
@@ -198,9 +204,9 @@ class CompareIntervals:
                                                      self.computed_intervals['exact'][alpha] for alpha in self.alphas}
                                      for method in self.methods}
 
-        distance_from_exact_stats = {method: {alpha: {'mean': np.mean(self.distances_from_exact[method][alpha]),
-                                                      'std': np.std(self.distances_from_exact[method][alpha])}
-                                              for alpha in self.alphas} for method in self.methods}
+        # distance_from_exact_stats = {method: {alpha: {'mean': np.mean(self.distances_from_exact[method][alpha]),
+        #                                               'std': np.std(self.distances_from_exact[method][alpha])}
+        #                                       for alpha in self.alphas} for method in self.methods}
 
         if length is not None:
             low_alpha, high_alpha = [round((1 - length) / 2, 5), round((length + 1) / 2, 5)]
@@ -216,8 +222,8 @@ class CompareIntervals:
                                 np.array(self.computed_intervals[method][low_alpha][-repetitions:])
                         for method in self.methods}
 
-        length_stats = {method: {'mean': np.mean(self.lengths[method]), 'std': np.std(self.lengths[method])}
-                        for method in self.methods}
+        # length_stats = {method: {'mean': np.mean(self.lengths[method]), 'std': np.std(self.lengths[method])}
+        #                 for method in self.methods}
 
         # for method in self.methods:
         #     if 0 in stat_original - np.array(self.computed_intervals[method][low_alpha][-repetitions:]):
@@ -232,7 +238,7 @@ class CompareIntervals:
         times_stats = {method: {'mean': np.mean(self.times[method]), 'std': np.std(self.times[method])}
                        for method in self.methods}
 
-        return self.coverages, times_stats, length_stats, distance_from_exact_stats
+        return self.coverages, times_stats  # , length_stats, distance_from_exact_stats
 
     def draw_intervals(self, alphas_to_draw: list[float], show=False):
         data = self.dgp.sample(sample_size=self.n)
@@ -313,7 +319,12 @@ class CompareIntervals:
                                                                            for m, a in zip(cov_methods, cov_alphas)])})
 
         plt.figure(figsize=(15, 6))
+
+        # if np.inf in df_distance.values:      TODO inf vals in 0.975 for ci_quant_nonparam, change this??
+        #     print()
+
         sns.boxplot(x="alpha", hue="method", y="distance from exact", data=df_distance, hue_order=self.methods)
+
         plt.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         plt.title('Distance from exact intervals for' + title)
         plt.tight_layout()
@@ -387,10 +398,13 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
     coverage_df_comb = df_length_comb = df_times_comb = df_distance_comb = pd.DataFrame()
     names = ['coverage', 'length', 'times', 'distance']
     dfs_comb = [coverage_df_comb, df_length_comb, df_times_comb, df_distance_comb]
+    first = True
     for dgp in dgps:
         for statistic in statistics:
+            print(statistic.__name__, dgp.describe())
             if (statistic.__name__ == 'corr' and type(dgp).__name__ != 'DGPBiNorm') or \
-                    (type(dgp).__name__ == 'DGPBiNorm' and statistic.__name__[:10] == 'percentile'):
+                    (type(dgp).__name__ == 'DGPBiNorm' and statistic.__name__ != 'corr') or \
+                    (type(dgp).__name__ == 'DGPCategorical' and statistic.__name__ == 'std'):
                 continue
             for n in ns:
                 for B in Bs:
@@ -407,17 +421,19 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
                         dfs[i]['B'] = B
                         dfs[i]['repetitions'] = repetitions
 
-                        dfs_comb[i] = pd.concat([dfs_comb[i], dfs[i]], ignore_index=True)
+                        # dfs_comb[i] = pd.concat([dfs_comb[i], dfs[i]], ignore_index=True)
+                        if first:
+                            if append:
+                                mode = 'a'
+                                header = os.path.exists(f'results/{names[i]}.csv')
+                            else:
+                                mode = 'w'
+                                header = True
+                            dfs[i].to_csv(f'results/{names[i]}.csv', header=header, mode=mode, index=False)
 
-    if append:
-        mode = 'a'
-        header = [not os.path.exists(f'results/{name}.csv') for name in names]
-    else:
-        mode = 'w'
-        header = [True] * len(names)
-
-    for i in range(len(names)):
-        dfs_comb[i].to_csv(f'results/{names[i]}.csv', header=header[i], mode=mode, index=False)
+                        else:
+                            dfs[i].to_csv(f'results/{names[i]}.csv', header=False, mode='a', index=False)
+                    first = False
 
 
 def corr(data):
@@ -433,7 +449,31 @@ def percentile_95(data):
     return np.quantile(data, 0.95, method='median_unbiased')
 
 
+# def mean(data):
+#     return np.mean(data, axis=0)
+#
+#
+# def median(data):
+#     return np.median(data, axis=0)
+#
+#
+# def std(data):
+#     return np.std(data, axis=0)
+
+# import traceback
+# import warnings
+# import sys
+#
+#
+# def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
+#     log = file if hasattr(file, 'write') else sys.stderr
+#     traceback.print_stack(file=log)
+#     log.write(warnings.formatwarning(message, category, filename, lineno, line))
+
+
 if __name__ == '__main__':
+
+    # warnings.showwarning = warn_with_traceback
 
     statistic = np.median
     n = 10
@@ -441,7 +481,7 @@ if __name__ == '__main__':
     alpha = 0.9
     seed = 0
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
-    methods = ['percentile', 'basic', 'bca', 'bc']  # , 'standard', 'smoothed', 'double']
+    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
@@ -473,7 +513,7 @@ if __name__ == '__main__':
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
     ns = [5, 10, 20, 50, 100]
-    Bs = [10, 100, 1000, 10000]
-    repetitions = 1000
+    Bs = [10, 100, 1000]
+    repetitions = 100
     run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions)
 
