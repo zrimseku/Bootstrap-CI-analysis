@@ -37,10 +37,18 @@ class Bootstrap:
 
     def evaluate_statistic(self, noise: np.array = None, sampling: str = 'nonparametric'):
         """Evaluates statistic on bootstrapped datasets"""
-        self.statistic_values = np.zeros(self.b)
+        if np.size(self.original_statistic_value) == 1:
+            self.statistic_values = np.zeros(self.b)
+        else:
+            self.statistic_values = np.zeros((self.b, np.size(self.original_statistic_value)))
+
         if noise is not None:
             # save statistic values with noise separately, so we don't override the original ones when calling smoothed
-            self.statistic_values_noise = np.zeros(self.b)
+            if np.size(self.original_statistic_value) == 1:
+                self.statistic_values_noise = np.zeros(self.b)
+            else:
+                self.statistic_values_noise = np.zeros((self.b, np.size(self.original_statistic_value)))
+
             statistic_input_noise = self.original_sample[self.bootstrap_indices]
             statistic_input_noise += noise
         for i in range(self.b):
@@ -113,6 +121,8 @@ class Bootstrap:
                 jackknife_values = [self.statistic(self.original_sample[np.arange(self.n) != i]) for i in range(self.n)]
                 jack_dot = np.mean(jackknife_values)
                 u = (self.n - 1) * (jack_dot - np.array(jackknife_values))
+                if np.sum(u**2) == 0:
+                    u += 1e-10                      # hack for u = 0
                 a = np.sum(u**3) / (6 * np.sum(u**2) ** 1.5)
                 # print('a', a)
 
@@ -169,7 +179,7 @@ class Bootstrap:
                 new_quantiles = np.quantile(sample_quantiles, quantile, method=quantile_type)
             # TODO kasneje: ta coverage iz drugih metod, ne samo percentile - lahko naredimo cel bootstrap iterativen?
             # TODO iterative bootstrap (možno več iteracij)
-            print('New quantiles: ', new_quantiles, f'({quantile})')
+            # print('New quantiles: ', new_quantiles, f'({quantile})')
             return np.quantile(self.statistic_values, new_quantiles, method=quantile_type)
 
         else:
