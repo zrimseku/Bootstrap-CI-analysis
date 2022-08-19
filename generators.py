@@ -151,16 +151,15 @@ class DGPCategorical(DGP):
     def __init__(self, seed: int, pvals: np.array, true_statistics: dict = {}):
         super(DGPCategorical, self).__init__(seed, true_statistics)
         self.pvals = pvals
-        self.true_statistics['mean'] = pvals
-        self.true_statistics['median'] = (pvals > 0.5).astype(float)
-        self.true_statistics['median'][pvals == 0.5] = 0.5
-        self.true_statistics['std'] = (pvals * (1 - pvals)) ** 0.5
-        self.true_statistics['percentile_5'] = (pvals >= 0.95).astype(int)
-        self.true_statistics['percentile_95'] = (pvals >= 0.05).astype(int)
+        self.true_statistics['mean'] = np.sum(pvals * np.array(range(len(pvals))))
+        self.true_statistics['median'] = np.where(np.cumsum(pvals) > 0.5)[0][0]
+        # self.true_statistics['std'] = (pvals * (1 - pvals)) ** 0.5 ???
+        self.true_statistics['percentile_5'] = np.where(np.cumsum(pvals) > 0.05)[0][0]
+        self.true_statistics['percentile_95'] = np.where(np.cumsum(pvals) > 0.95)[0][0]
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
-        return np.random.multinomial(1, self.pvals, size=size)
+        return np.array([np.argmax(c, axis=-1) for c in np.random.multinomial(1, self.pvals, size=size)])
 
     def describe(self):
         return type(self).__name__ + '_' + str(self.pvals)
@@ -172,12 +171,12 @@ class DGPBiNorm(DGP):
         super(DGPBiNorm, self).__init__(seed, true_statistics)
         self.mean = mean        # means of both variables, 1D array of length 2
         self.cov = cov          # covariance matrix, 2D array (2x2)
-        self.true_statistics['mean'] = mean
+        self.true_statistics['mean'] = mean                         # TODO do we need any of these (for now just corr)
         self.true_statistics['median'] = mean
         self.true_statistics['std'] = np.diag(cov) ** 0.5
         # self.true_statistics['5_percentile'] = loc - 1.645 * scale     # TODO do we need percentiles??
         # self.true_statistics['95_percentile'] = loc + 1.645 * scale
-        self.true_statistics['corr'] = cov[0, 1] / (cov[0, 0] * cov[1, 1]) ** 0.5   # TODO extend it to multiple??
+        self.true_statistics['corr'] = cov[0, 1] / (cov[0, 0] * cov[1, 1]) ** 0.5   # extend it to multiple??
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
