@@ -13,7 +13,6 @@ from arch.bootstrap import IIDBootstrap as boot_arch
 import matplotlib.pyplot as plt
 from collections import defaultdict
 import seaborn as sns
-import matplotlib.pyplot as plt
 
 from ci_methods import Bootstrap
 from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPBernoulli, DGPCategorical
@@ -399,7 +398,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 
 def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alphas_to_draw=[0.05, 0.95], length=0.9,
-                   append=True, nr_processes=32):
+                   append=False, nr_processes=32):
     # coverage_df_comb = df_length_comb = df_times_comb = df_distance_comb = pd.DataFrame()
     names = ['coverage', 'length', 'times', 'distance']
     all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
@@ -409,6 +408,9 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
             'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
             'distance': ['method', 'alpha', 'distance from exact', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
             'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods}
+    if not append:
+        for name in names:
+            pd.DataFrame(columns=cols[name]).to_csv('results/' + name + '.csv', index=False)
     # dfs_comb = [coverage_df_comb, df_length_comb, df_times_comb, df_distance_comb]
     # first = True
     params = []
@@ -536,5 +538,5 @@ if __name__ == '__main__':
     ns = [5, 10, 20, 50, 100]
     Bs = [10, 100, 1000]
     repetitions = 100
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4)
+    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=32)
 
