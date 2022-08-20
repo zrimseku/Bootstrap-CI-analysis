@@ -1,5 +1,7 @@
 import os
 import time
+from itertools import repeat
+from multiprocessing import Pool
 
 import numpy as np
 import pandas as pd
@@ -107,7 +109,7 @@ class CompareIntervals:
                     s = np.std(data)
                     z = (np.quantile(data, quant, method=self.quantile_type) - m) / s
                     nc = -z * np.sqrt(self.n)
-                    ci[method] = m - scipy.stats.nct.ppf(1 - self.alphas, nc=nc, df=self.n - 1) * s / np.sqrt(n)
+                    ci[method] = m - scipy.stats.nct.ppf(1 - self.alphas, nc=nc, df=self.n - 1) * s / np.sqrt(self.n)
 
                 elif method == 'ci_quant_nonparam':
                     t = time.time()
@@ -175,19 +177,26 @@ class CompareIntervals:
 
     def compare_intervals(self, repetitions, length=None):
         true_statistic_value = self.dgp.get_true_value(self.statistic.__name__)
-        self.exact_interval_simulation(10000)
+        self.exact_interval_simulation(100000)
 
         stat_original = []
         data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
 
+        slow_methods = []                   # hack for speeding up in double or studentized method
         # calculation with different bootstrap methods
-        for r in tqdm(range(repetitions)):
+        for r in range(repetitions):
             # calculation with non-bootstrap methods
             self.compute_non_bootstrap_intervals(data[r])
             # calculation with different bootstrap methods
+            if r == 10000:
+                slow_methods = [m for m in self.methods if m in ['double', 'studentized']]
+                print(f"Leaving out methods {slow_methods} during repetitions over 10000.")
+                self.methods = [m for m in self.methods if m not in ['double', 'studentized']]
+
             bts = self.compute_bootstrap_intervals(data[r])
             stat_original.append(bts.original_statistic_value)
         stat_original = np.array(stat_original)
+        self.methods = self.methods + slow_methods
 
         # exact intervals
         self.computed_intervals['exact'] = {a: stat_original - self.inverse_cdf[a] for a in self.alphas}
@@ -195,11 +204,7 @@ class CompareIntervals:
         self.coverages = {method: {alpha: np.mean(np.array(self.computed_intervals[method][alpha][-repetitions:]) >
                                                   true_statistic_value) for alpha in self.alphas}
                           for method in self.methods}
-        for alpha in self.alphas:
-            for method in self.methods:
-                if len(self.computed_intervals['exact'][alpha]) == 0 or \
-                        len(np.array(self.computed_intervals[method][alpha][-repetitions:])) == 0:
-                    test = 0
+
         self.distances_from_exact = {method: {alpha: np.array(self.computed_intervals[method][alpha][-repetitions:]) -
                                                      self.computed_intervals['exact'][alpha] for alpha in self.alphas}
                                      for method in self.methods}
@@ -394,46 +399,62 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 
 def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alphas_to_draw=[0.05, 0.95], length=0.9,
-                   append=True):
-    coverage_df_comb = df_length_comb = df_times_comb = df_distance_comb = pd.DataFrame()
+                   append=True, nr_processes=32):
+    # coverage_df_comb = df_length_comb = df_times_comb = df_distance_comb = pd.DataFrame()
     names = ['coverage', 'length', 'times', 'distance']
-    dfs_comb = [coverage_df_comb, df_length_comb, df_times_comb, df_distance_comb]
-    first = True
+    all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
+                   'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
+                   'ci_corr_spearman']
+    cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
+            'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
+            'distance': ['method', 'alpha', 'distance from exact', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
+            'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods}
+    # dfs_comb = [coverage_df_comb, df_length_comb, df_times_comb, df_distance_comb]
+    # first = True
+    params = []
     for dgp in dgps:
         for statistic in statistics:
-            print(statistic.__name__, dgp.describe())
             if (statistic.__name__ == 'corr' and type(dgp).__name__ != 'DGPBiNorm') or \
                     (type(dgp).__name__ == 'DGPBiNorm' and statistic.__name__ != 'corr') or \
                     (type(dgp).__name__ == 'DGPCategorical' and statistic.__name__ == 'std'):
                 continue
             for n in ns:
                 for B in Bs:
-                    comparison = CompareIntervals(statistic, methods.copy(), dgp, n, B, alphas.copy())
-                    _, coverage_df, df_length, df_times, df_distance = comparison.plot_results(repetitions=repetitions,
-                                                                                               length=length)
-                    dfs = [coverage_df, df_length, df_times, df_distance]
-                    comparison.draw_intervals(alphas_to_draw)
-                    df_length['CI'] = length
-                    for i in range(len(dfs)):
-                        dfs[i]['dgp'] = dgp.describe()
-                        dfs[i]['statistic'] = statistic.__name__
-                        dfs[i]['n'] = n
-                        dfs[i]['B'] = B
-                        dfs[i]['repetitions'] = repetitions
+                    if B > 1000:
+                        methods_par = [m for m in methods if m not in ['double', 'studentized']]
+                    else:
+                        methods_par = methods.copy()
 
-                        # dfs_comb[i] = pd.concat([dfs_comb[i], dfs[i]], ignore_index=True)
-                        if first:
-                            if append:
-                                mode = 'a'
-                                header = os.path.exists(f'results/{names[i]}.csv')
-                            else:
-                                mode = 'w'
-                                header = True
-                            dfs[i].to_csv(f'results/{names[i]}.csv', header=header, mode=mode, index=False)
+                    params.append((statistic, methods_par, dgp, n, B, alphas.copy()))
 
-                        else:
-                            dfs[i].to_csv(f'results/{names[i]}.csv', header=False, mode='a', index=False)
-                    first = False
+    pool = Pool(processes=nr_processes)
+    for dfs in tqdm(pool.imap_unordered(multiprocess_run_function, zip(params, repeat(repetitions), repeat(length),
+                                                                       repeat(alphas_to_draw)), chunksize=1),
+                    total=len(params)):
+
+        for i in range(len(dfs)):
+
+            dfs[i] = pd.concat([pd.DataFrame(columns=cols[names[i]]), dfs[i]])      # setting right order of columns
+            dfs[i].to_csv(f'results/{names[i]}.csv', header=False, mode='a', index=False)
+
+
+def multiprocess_run_function(param_tuple):
+    pars, repetitions, length, alphas_to_draw = param_tuple
+    statistic, methods, dgp, n, B, alphas = pars
+    comparison = CompareIntervals(*pars)
+    _, coverage_df, df_length, df_times, df_distance = comparison.plot_results(repetitions=repetitions,
+                                                                               length=length)
+    dfs = [coverage_df, df_length, df_times, df_distance]
+    comparison.draw_intervals(alphas_to_draw)
+    df_length['CI'] = length
+    for i in range(len(dfs)):
+        dfs[i]['dgp'] = dgp.describe()
+        dfs[i]['statistic'] = statistic.__name__
+        dfs[i]['n'] = n
+        dfs[i]['B'] = B
+        dfs[i]['repetitions'] = repetitions
+
+    return dfs
 
 
 def corr(data):
@@ -481,7 +502,7 @@ if __name__ == '__main__':
     alpha = 0.9
     seed = 0
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
-    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double']
+    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
     # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
     # jackknife-after-bootstrap
@@ -515,5 +536,5 @@ if __name__ == '__main__':
     ns = [5, 10, 20, 50, 100]
     Bs = [10, 100, 1000]
     repetitions = 100
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions)
+    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4)
 

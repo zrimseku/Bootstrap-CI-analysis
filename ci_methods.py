@@ -137,18 +137,11 @@ class Bootstrap:
             standard_errors = self.studentized_error_calculation()
             t_samples = (self.statistic_values - self.original_statistic_value) / standard_errors
             se = np.std(self.statistic_values)      # tole naj bi bil se na original podatkih, kako to dobiš avtomatsko?
-            # print(self.original_statistic_value)
-            # print(np.quantile(t_samples, quantile) * se, method=quantile_type)
-            # print((self.original_statistic_value + np.quantile(t_samples, quantile) * se)) boljši rezultati, ni isto
             return (self.original_statistic_value - np.quantile(t_samples, quantile, method=quantile_type) * se)[::-1]
 
         elif method == 'smoothed':
             input_shape = self.original_sample[self.bootstrap_indices].shape
             if sampling_args['width'] is None:
-                # parameter set as mean difference of each coordinate between ordered samples - naive idea
-                # ordered_samples = np.sort(self.original_sample, axis=0)
-                # h = abs(np.mean(ordered_samples[1:] - ordered_samples[:-1]))
-
                 # rule of thumb width selection (we can improve it with AMISE/MISE approximation if needed)
                 iqr = np.quantile(self.statistic_values, 0.75, method=quantile_type) - \
                       np.quantile(self.statistic_values, 0.25, method=quantile_type)
@@ -156,7 +149,7 @@ class Bootstrap:
             else:
                 h = sampling_args['width']
             if sampling_args['kernel'] == 'uniform':
-                noise = np.random.uniform(-h, h, input_shape)       # -h, h from scikit-learn documentation
+                noise = np.random.uniform(-h, h, input_shape)
             elif sampling_args['kernel'] == 'norm':
                 noise = np.random.normal(0, h, input_shape)
             else:
@@ -193,8 +186,11 @@ class Bootstrap:
         #  paralelizacija
 
         # NESTED BOOTSTRAP:
+
         nested_btsp_values = self.nested_bootstrap(self.b)
         standard_errors = np.std(nested_btsp_values, axis=1)
+        if 0 in standard_errors:
+            standard_errors += 1e-10
 
         return standard_errors
 
