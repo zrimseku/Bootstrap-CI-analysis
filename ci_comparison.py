@@ -418,6 +418,7 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
         cov = pd.read_csv('results/coverage.csv')
 
     params = []
+    nr_skipped = 0
     for dgp in dgps:
         for statistic in statistics:
             if (statistic.__name__ == 'corr' and type(dgp).__name__ != 'DGPBiNorm') or \
@@ -432,14 +433,19 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
                     # else:
 
                     if dont_repeat:
-                        if cov[cov['dgp'] == dgp.describe() & cov['statistic'] == statistic & cov['n'] == n &
-                               cov['B'] == B & cov['repetitions'] == repetitions].shape[0] > 0:
+                        same_pars = cov[(cov['dgp'] == dgp.describe()) & (cov['statistic'] == statistic.__name__) &
+                                        (cov['n'] == n) & (cov['B'] == B) & (cov['repetitions'] == repetitions)]
+                        if same_pars.shape[0] > 0:
+                            # TODO: check if we have calculations for all methods and alphas if needed
+                            nr_skipped += 1
                             continue
 
                     methods_par = methods.copy()
 
                     params.append((statistic, methods_par, dgp, n, B, alphas.copy()))
 
+    print(f'Skipped {nr_skipped} combinations, because we already have results.')
+    
     pool = Pool(processes=nr_processes)
     for dfs in tqdm(pool.imap_unordered(multiprocess_run_function, zip(params, repeat(repetitions), repeat(length),
                                                                        repeat(alphas_to_draw)), chunksize=1),
@@ -547,9 +553,9 @@ if __name__ == '__main__':
             DGPCategorical(seed, np.array([0.1, 0.3, 0.5, 0.1])), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
     dgps = [DGPNorm(seed, 0, 1)]
-    statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr][::-1]
+    statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
     ns = [5, 10, 20, 50, 100]
     Bs = [1000, 100]#, 1000]
     repetitions = 10
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4)
+    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=True)
 
