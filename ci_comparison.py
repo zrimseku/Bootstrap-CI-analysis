@@ -444,7 +444,7 @@ def multiprocess_run_function(param_tuple):
     pars, repetitions, length, alphas_to_draw = param_tuple
     statistic, methods, dgp, n, B, alphas = pars
     use_jit = (repetitions >= 100)
-    comparison = CompareIntervals(*pars, use_jit)
+    comparison = CompareIntervals(*pars, use_jit=use_jit)
     _, coverage_df, df_length, df_times, df_distance = comparison.plot_results(repetitions=repetitions,
                                                                                length=length)
     dfs = [coverage_df, df_length, df_times, df_distance]
@@ -536,7 +536,7 @@ if __name__ == '__main__':
             DGPCategorical(seed, np.array([0.1, 0.3, 0.5, 0.1])), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
     dgps = [DGPNorm(seed, 0, 1)]
-    statistics = [np.mean, np.median]#, np.std, percentile_5, percentile_95, corr]
+    statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr][::-1]
     ns = [5, 10, 20, 50, 100]
     Bs = [1000, 100]#, 1000]
     repetitions = 10
