@@ -140,7 +140,7 @@ class DGPBernoulli(DGP):
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
-        return np.random.binomial(1, self.p, size=size)
+        return np.random.binomial(1, self.p, size=size).astype(float)
 
     def describe(self):
         return type(self).__name__ + '_' + str(self.p)
@@ -159,7 +159,7 @@ class DGPCategorical(DGP):
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
-        return np.array([np.argmax(c, axis=-1) for c in np.random.multinomial(1, self.pvals, size=size)])
+        return np.array([np.argmax(c, axis=-1) for c in np.random.multinomial(1, self.pvals, size=size)]).astype(float)
 
     def describe(self):
         return type(self).__name__ + '_' + str(self.pvals)
