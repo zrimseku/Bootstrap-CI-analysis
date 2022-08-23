@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats
+from numba import njit
 from tqdm import tqdm
 from scipy.stats import norm
 from scipy.stats import bootstrap as boot_sci
@@ -9,7 +10,7 @@ import matplotlib.pyplot as plt
 
 class Bootstrap:
 
-    def __init__(self, data: np.array, statistic: callable):
+    def __init__(self, data: np.array, statistic: callable, use_jit: bool = False):
         self.original_sample = data
         self.original_statistic_value = statistic(data)
         self.statistic = statistic
@@ -19,6 +20,7 @@ class Bootstrap:
         self.statistic_values = np.empty(0)
         self.statistic_values_noise = np.empty(0)
         self.implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed', 'double']
+        self.use_jit = use_jit
         # sampling method?
         # CI method?
 
@@ -186,7 +188,6 @@ class Bootstrap:
         #  paralelizacija
 
         # NESTED BOOTSTRAP:
-
         nested_btsp_values = self.nested_bootstrap(self.b)
         standard_errors = np.std(nested_btsp_values, axis=1)
         if 0 in standard_errors:
@@ -195,18 +196,20 @@ class Bootstrap:
         return standard_errors
 
     def nested_bootstrap(self, b_inner):
-        new_values = np.zeros([self.b, b_inner])
-        for i in range(self.b):
-            new_indices = np.random.choice(self.bootstrap_indices[i, :], size=[b_inner, self.n])
-            # new_values = np.zeros(self.b)
-            for j in range(b_inner):
-                new_values[i, j] = self.statistic(self.original_sample[new_indices[j, :]])
+
+        if self.b >= 500 or b_inner >= 500 or self.n > 100 or self.use_jit:
+            stat_njit = {'mean': wrapped_mean, 'median': wrapped_median, 'std': wrapped_std,
+                 'percentile_5': wrapped_percentile_5, 'percentile_95': wrapped_percentile_95,
+                 'corr': wrapped_corr}[self.statistic.__name__]
+            new_values = nested_bootstrap_jit(self.b, b_inner, self.n, self.original_sample, stat_njit)
+        else:
+            new_values = np.zeros([self.b, b_inner])
+            for i in range(self.b):
+                new_indices = np.random.choice(self.bootstrap_indices[i, :], size=[b_inner, self.n])
+                for j in range(b_inner):
+                    new_values[i, j] = self.statistic(self.original_sample[new_indices[j, :]])
 
         return new_values
-
-    # def calibration(self):
-    #     # a bo to posebej, a dodamo v ci, a sploh? -> = double bootstrap, bo tam
-    #     pass
 
     def plot_bootstrap_distribution(self):
         """Draws distribution of statistic values on all bootstrap samples."""
@@ -247,3 +250,47 @@ class Bootstrap:
 
         plt.show()
 
+
+# NUMBA functions, used to significantly speed up nested bootstrap calculation
+@njit()
+def nested_bootstrap_jit(b, b_inner, n, original_sample, statistic):
+    bootstrap_indices = np.random.choice(np.arange(n), size=(b, n))
+    new_values = np.zeros((b, b_inner))
+    for i in range(b):
+        new_indices = np.random.choice(bootstrap_indices[i, :], size=(b_inner, n))
+        for j in range(b_inner):
+            new_values[i, j] = statistic(original_sample[new_indices[j, :]])
+
+    return new_values
+
+
+@njit
+def wrapped_median(val):
+    return np.median(val)
+
+
+@njit
+def wrapped_mean(val):
+    return np.mean(val)
+
+
+@njit
+def wrapped_std(val):
+    return np.std(val)
+
+
+@njit()
+def wrapped_corr(data):
+    c = np.corrcoef(data, rowvar=False)
+    return c[0, 1]
+
+
+@njit
+def wrapped_percentile_5(data):
+    # TODO: can't use median unbiased method in numba, implement it if needed
+    return np.quantile(data, 0.05)  # , method='median_unbiased')
+
+
+@njit
+def wrapped_percentile_95(data):
+    return np.quantile(data, 0.95)  # , method='median_unbiased')
