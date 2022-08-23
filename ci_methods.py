@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 class Bootstrap:
 
-    def __init__(self, data: np.array, statistic: callable):
+    def __init__(self, data: np.array, statistic: callable, use_jit: bool = False):
         self.original_sample = data
         self.original_statistic_value = statistic(data)
         self.statistic = statistic
@@ -20,6 +20,7 @@ class Bootstrap:
         self.statistic_values = np.empty(0)
         self.statistic_values_noise = np.empty(0)
         self.implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed', 'double']
+        self.use_jit = use_jit
         # sampling method?
         # CI method?
 
@@ -196,7 +197,7 @@ class Bootstrap:
 
     def nested_bootstrap(self, b_inner):
 
-        if self.b >= 500 or b_inner >= 500 or self.n > 100:
+        if self.b >= 500 or b_inner >= 500 or self.n > 100 or self.use_jit:
             stat_njit = {'mean': wrapped_mean, 'median': wrapped_median, 'std': wrapped_std,
                  'percentile_5': wrapped_percentile_5, 'percentile_95': wrapped_percentile_95,
                  'corr': wrapped_corr}[self.statistic.__name__]

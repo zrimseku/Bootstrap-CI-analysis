@@ -23,7 +23,7 @@ from R_functions import psignrank_range
 class CompareIntervals:
 
     def __init__(self, statistic: callable, methods: list[str], data_generator: DGP, n: int, b: int,
-                 alphas: list[float], quantile_type='median_unbiased'):
+                 alphas: list[float], quantile_type='median_unbiased', use_jit: bool = True):
         self.statistic = statistic
         self.methods = methods
         self.dgp = data_generator
@@ -37,11 +37,12 @@ class CompareIntervals:
         self.coverages = {}
         self.distances_from_exact = {}
         self.lengths = {}
+        self.use_jit = use_jit
 
     def compute_bootstrap_intervals(self, data: np.array):
         # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
         t = time.time()
-        bts = Bootstrap(data, self.statistic)
+        bts = Bootstrap(data, self.statistic, self.use_jit)
         bts.sample(self.b)
         bts.evaluate_statistic()
         ts = time.time() - t            # time needed for sampling (will add it to all methods)
@@ -441,7 +442,8 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
 def multiprocess_run_function(param_tuple):
     pars, repetitions, length, alphas_to_draw = param_tuple
     statistic, methods, dgp, n, B, alphas = pars
-    comparison = CompareIntervals(*pars)
+    use_jit = (repetitions >= 100)
+    comparison = CompareIntervals(*pars, use_jit)
     _, coverage_df, df_length, df_times, df_distance = comparison.plot_results(repetitions=repetitions,
                                                                                length=length)
     dfs = [coverage_df, df_length, df_times, df_distance]
@@ -532,9 +534,10 @@ if __name__ == '__main__':
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5), DGPLaplace(seed, 0, 1),
             DGPCategorical(seed, np.array([0.1, 0.3, 0.5, 0.1])), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
-    statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
+    dgps = [DGPNorm(seed, 0, 1)]
+    statistics = [np.mean, np.median]#, np.std, percentile_5, percentile_95, corr]
     ns = [5, 10, 20, 50, 100]
-    Bs = [10, 100, 1000]
-    repetitions = 100
+    Bs = [1000, 100]#, 1000]
+    repetitions = 10
     run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4)
 
