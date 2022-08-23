@@ -251,6 +251,7 @@ class Bootstrap:
         plt.show()
 
 
+# NUMBA functions, used to significantly speed up nested bootstrap calculation
 @njit()
 def nested_bootstrap_jit(b, b_inner, n, original_sample, statistic):
     bootstrap_indices = np.random.choice(np.arange(n), size=(b, n))
@@ -286,6 +287,7 @@ def wrapped_corr(data):
 
 @njit
 def wrapped_percentile_5(data):
+    # TODO: can't use median unbiased method in numba, implement it if needed
     return np.quantile(data, 0.05)  # , method='median_unbiased')
 
 

@@ -400,7 +400,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 
 def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alphas_to_draw=[0.05, 0.95], length=0.9,
-                   append=True, nr_processes=32):
+                   append=True, nr_processes=32, dont_repeat=False):
     names = ['coverage', 'length', 'times', 'distance']
     all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
                    'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
@@ -413,6 +413,10 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
     if not append:
         for name in names:
             pd.DataFrame(columns=cols[name]).to_csv('results/' + name + '.csv', index=False)
+
+    if dont_repeat:
+        cov = pd.read_csv('results/coverage.csv')
+
     params = []
     for dgp in dgps:
         for statistic in statistics:
@@ -422,10 +426,17 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
                 continue
             for n in ns:
                 for B in Bs:
-                    if B > 1000:
-                        methods_par = [m for m in methods if m not in ['double', 'studentized']]
-                    else:
-                        methods_par = methods.copy()
+                    # not needed anymore because of numba?
+                    # if B > 1000:
+                    #     methods_par = [m for m in methods if m not in ['double', 'studentized']]
+                    # else:
+
+                    if dont_repeat:
+                        if cov[cov['dgp'] == dgp.describe() & cov['statistic'] == statistic & cov['n'] == n &
+                               cov['B'] == B & cov['repetitions'] == repetitions].shape[0] > 0:
+                            continue
+
+                    methods_par = methods.copy()
 
                     params.append((statistic, methods_par, dgp, n, B, alphas.copy()))
 
