@@ -401,7 +401,6 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alphas_to_draw=[0.05, 0.95], length=0.9,
                    append=True, nr_processes=32):
-    # coverage_df_comb = df_length_comb = df_times_comb = df_distance_comb = pd.DataFrame()
     names = ['coverage', 'length', 'times', 'distance']
     all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
                    'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
@@ -410,8 +409,10 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
             'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
             'distance': ['method', 'alpha', 'distance from exact', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
             'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods}
-    # dfs_comb = [coverage_df_comb, df_length_comb, df_times_comb, df_distance_comb]
-    # first = True
+
+    if not append:
+        for name in names:
+            pd.DataFrame(columns=cols[name]).to_csv('results/' + name + '.csv', index=False)
     params = []
     for dgp in dgps:
         for statistic in statistics:
