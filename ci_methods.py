@@ -139,7 +139,8 @@ class Bootstrap:
             standard_errors = self.studentized_error_calculation()
             t_samples = (self.statistic_values - self.original_statistic_value) / standard_errors
             se = np.std(self.statistic_values)      # tole naj bi bil se na original podatkih, kako to dobiš avtomatsko?
-            return (self.original_statistic_value - np.quantile(t_samples, quantile, method=quantile_type) * se)[::-1]
+            return self.original_statistic_value - np.quantile(t_samples, quantile, method=quantile_type) * se
+            # [::-1]
 
         elif method == 'smoothed':
             input_shape = self.original_sample[self.bootstrap_indices].shape
