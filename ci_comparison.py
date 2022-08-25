@@ -321,15 +321,15 @@ class CompareIntervals:
 
         df_distance = pd.DataFrame({'method': np.repeat(cov_methods, repetitions),
                                     'alpha': np.repeat(cov_alphas, repetitions),
-                                    'distance from exact': np.concatenate([self.distances_from_exact[m][a][-repetitions:]
-                                                                           for m, a in zip(cov_methods, cov_alphas)])})
+                                    'distance': np.concatenate([self.distances_from_exact[m][a][-repetitions:]
+                                                                for m, a in zip(cov_methods, cov_alphas)])})
 
         plt.figure(figsize=(15, 6))
 
         # if np.inf in df_distance.values:      TODO inf vals in 0.975 for ci_quant_nonparam, change this??
         #     print()
 
-        sns.boxplot(x="alpha", hue="method", y="distance from exact", data=df_distance, hue_order=self.methods)
+        sns.boxplot(x="alpha", hue="method", y="distance", data=df_distance, hue_order=self.methods)
 
         plt.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         plt.title('Distance from exact intervals for' + title)
@@ -407,7 +407,7 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
                    'ci_corr_spearman']
     cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
             'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
-            'distance': ['method', 'alpha', 'distance from exact', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
+            'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
             'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods}
 
     if not append:
@@ -445,7 +445,7 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
                     params.append((statistic, methods_par, dgp, n, B, alphas.copy()))
 
     print(f'Skipped {nr_skipped} combinations, because we already have results.')
-    
+
     pool = Pool(processes=nr_processes)
     for dfs in tqdm(pool.imap_unordered(multiprocess_run_function, zip(params, repeat(repetitions), repeat(length),
                                                                        repeat(alphas_to_draw)), chunksize=1),
@@ -557,5 +557,5 @@ if __name__ == '__main__':
     ns = [5, 10, 20, 50, 100]
     Bs = [1000, 100]#, 1000]
     repetitions = 10
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=True)
+    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=False)
 
