@@ -79,9 +79,11 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
 
     g = sns.FacetGrid(df, row=row, col=col, margin_titles=True)
     if comparing == 'coverage':
-        g.map(sns.lineplot, x, comparing, hue, hue_order=df[hue].unique())
+        g.map(sns.pointplot, x, comparing, hue, hue_order=df[hue].unique(), dodge=1, join=False)
     else:
         g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=1)
+        ylim = np.nanquantile(df['distance'], (0.01, 0.99))
+        g.set(ylim=ylim)
 
     if (row == 'alpha' or col == 'alpha') and comparing == 'coverage':
         g.map(plot_alpha_lines, 'alpha')
@@ -95,7 +97,7 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
         g.fig.suptitle(title, fontsize=16)
 
     if save_add is not None:
-        plt.savefig(f'images/comparison/compare_{comparing}_{x}_{row}_{col}_{save_add}.png')
+        plt.savefig(f'images/comparison/only_bts/compare_{comparing}_{x}_{row}_{col}_{save_add}.png')
         plt.close()
     else:
         plt.show()
@@ -107,7 +109,7 @@ def plot_alpha_lines(*args, **kwargs):
     ax.axhline(alphas.values[0], linestyle='--', color='gray')
 
 
-def main_plot_comparison(B_as_method=False):
+def main_plot_comparison(B_as_method=False, filter_by={}, additional=''):
     for comparing in ['coverage', 'distance']:
         df = pd.read_csv(f'results_lab2/{comparing}.csv')  # TODO change
         df = df[df['method'] != 'studentized']
@@ -121,16 +123,16 @@ def main_plot_comparison(B_as_method=False):
                         print(statistic, B)
                         continue
                     title = f'{comparing}s for {statistic} using B = {B}'
-                    compare_cov_dis_grid(df_part, comparing=comparing, filter_by={}, x='n', row='alpha', col='dgp',
-                                         title=title, save_add=f'{statistic}_{B}')
+                    compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
+                                         col='dgp', title=title, save_add=f'{statistic}_{B}{additional}')
 
 
 if __name__ == '__main__':
     cov = pd.read_csv('results_lab/coverage.csv')  # TODO change from lab and include studentized
     cov = cov[cov['method'] != 'studentized']
-    methods = ['percentile', 'bca', 'double', 'ttest', 'wilcoxon', 'chi_sq']
+    bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison()
+    main_plot_comparison(filter_by={'method': bts_methods}, additional='_only_bts')
 
     # compare_all_cov_dis(cov, 'coverage', methods, [10], [5, 10])
     # compare_alpha_cov_dis_by_n(cov, 'coverage', 0.95, methods, [10], [5, 10])
