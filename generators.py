@@ -69,7 +69,7 @@ class DGPBeta(DGP):
         self.alpha = alpha
         self.beta = beta
         self.true_statistics['mean'] = alpha / (alpha + beta)
-        self.true_statistics['std'] = alpha * beta / (alpha + beta) ** 2 / (alpha + beta + 1)
+        self.true_statistics['std'] = np.sqrt(alpha * beta / (alpha + beta) ** 2 / (alpha + beta + 1))
         self.true_statistics['percentile_5'] = scipy.stats.beta.ppf(0.05, alpha, beta)
         self.true_statistics['percentile_95'] = scipy.stats.beta.ppf(0.95, alpha, beta)
         self.true_statistics['median'] = scipy.stats.beta.ppf(0.5, alpha, beta)
