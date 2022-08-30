@@ -79,7 +79,7 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
 
     g = sns.FacetGrid(df, row=row, col=col, margin_titles=True)
     if comparing == 'coverage':
-        g.map(sns.pointplot, x, comparing, hue, hue_order=df[hue].unique(), dodge=1, join=False)
+        g.map(sns.pointplot, x, comparing, hue, hue_order=df[hue].unique(), dodge=1, scale=0.5, join=False)
     else:
         g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=1)
         ylim = np.nanquantile(df['distance'], (0.01, 0.99))
@@ -87,6 +87,9 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
 
     if (row == 'alpha' or col == 'alpha') and comparing == 'coverage':
         g.map(plot_alpha_lines, 'alpha')
+        g.map(plot_errorlines, 'coverage', 'n', 'method', 'repetitions')
+        # df['ci'] = df['coverage'] * (1 - df['coverage']) / df['repetitions']
+        # g.map(plt.errorbar, 'n', 'coverage', 'ci', fmt='none')
         for ax in g.axes[df['alpha'].nunique() - 1, :]:
             ax.set_xlabel(x)
 
@@ -103,18 +106,39 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
         plt.show()
 
 
-def plot_alpha_lines(*args, **kwargs):
+def plot_alpha_lines(alphas, **kwargs):
     ax = plt.gca()
-    alphas = args[0]
     ax.axhline(alphas.values[0], linestyle='--', color='gray')
 
 
+def plot_errorlines(coverages, ns, methods, repetitions, **kwargs):
+    ax = plt.gca()
+    err = np.sqrt(coverages * (1 - coverages) / repetitions)
+    x_coords = []
+    y_coords = []
+    err_ordered = []
+    i = 0
+    nc = len(ax.collections)
+    for point_pair in ax.collections:
+        mc = point_pair.get_offsets().shape[0]
+        j = 0
+        for x, y in point_pair.get_offsets():
+            x_coords.append(x)
+            y_coords.append(y)
+            err_ordered.append(err.values[mc * j + i])
+            j += 1
+        i += 1
+    # x_coords = np.array(range(35)) / 7
+    ax.errorbar(x=x_coords, y=y_coords, yerr=err, fmt='none', color='black')
+
+
 def main_plot_comparison(B_as_method=False, filter_by={}, additional=''):
-    for comparing in ['coverage', 'distance']:
-        df = pd.read_csv(f'results_lab2/{comparing}.csv')  # TODO change
-        df = df[df['method'] != 'studentized']
-        for statistic in ['mean', 'median', 'std', 'percentile_5', 'percentile_95', 'corr']:
+    for comparing in ['coverage']:#, 'distance']:
+        df = pd.read_csv(f'results_lab2/{comparing}.csv')   # TODO change
+        df = df[df['method'] != 'studentized']              # TODO delete
+        for statistic in ['mean', 'median']:#, 'std', 'percentile_5', 'percentile_95', 'corr']:
             if B_as_method:
+                # a povprečit a vzet samo enega od B-jev za ostale metode?
                 pass
             else:
                 for B in [10, 100, 1000]:
@@ -124,7 +148,7 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional=''):
                         continue
                     title = f'{comparing}s for {statistic} using B = {B}'
                     compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
-                                         col='dgp', title=title, save_add=f'{statistic}_{B}{additional}')
+                                         col='dgp', title=title, save_add=None)#save_add=f'{statistic}_{B}{additional}')
 
 
 if __name__ == '__main__':
