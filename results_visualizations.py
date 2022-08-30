@@ -77,9 +77,13 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
     for key in filter_by.keys():
         df = df[df[key].isin(filter_by[key])]
 
-    g = sns.FacetGrid(df, row=row, col=col, margin_titles=True)
+    colors = {m: c for (m, c) in zip(df['method'].unique(),
+                                     iter(plt.cm.jet(np.linspace(0.05, 0.95, df['method'].nunique()))))}
+
+    g = sns.FacetGrid(df, row=row, col=col, margin_titles=True, sharex=True, sharey='row', palette=colors)
     if comparing == 'coverage':
-        g.map(sns.pointplot, x, comparing, hue, hue_order=df[hue].unique(), dodge=1, scale=0.5, join=False)
+        g.map(sns.pointplot, x, comparing, hue, hue_order=df[hue].unique(), dodge=1, scale=0.5, join=False,
+              palette=colors)
     else:
         g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=1)
         ylim = np.nanquantile(df['distance'], (0.01, 0.99))
@@ -88,10 +92,18 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
     if (row == 'alpha' or col == 'alpha') and comparing == 'coverage':
         g.map(plot_alpha_lines, 'alpha')
         g.map(plot_errorlines, 'coverage', 'n', 'method', 'repetitions')
-        # df['ci'] = df['coverage'] * (1 - df['coverage']) / df['repetitions']
-        # g.map(plt.errorbar, 'n', 'coverage', 'ci', fmt='none')
+
+        g.map(set_ylims, 'alpha')
+
         for ax in g.axes[df['alpha'].nunique() - 1, :]:
             ax.set_xlabel(x)
+        for ax in g.axes[:, 0]:
+            ax.set_ylabel('coverage')
+
+    if comparing == 'distance':
+        for axs in g.axes:
+            for ax in axs:
+                ax.axhline(0, linestyle='--', color='gray')
 
     g.add_legend()
 
@@ -132,8 +144,20 @@ def plot_errorlines(coverages, ns, methods, repetitions, **kwargs):
     ax.errorbar(x=x_coords, y=y_coords, yerr=err, fmt='none', color='black')
 
 
+def set_ylims(alphas, **kwargs):
+    a = alphas.values[0]
+    if a > 0.9:
+        ylim = (0.8, 1)
+    elif a < 0.1:
+        ylim = (0, 0.2)
+    else:
+        ylim = (a - 0.1, a + 0.1)
+    ax = plt.gca()
+    ax.set(ylim=ylim)
+
+
 def main_plot_comparison(B_as_method=False, filter_by={}, additional=''):
-    for comparing in ['coverage']:#, 'distance']:
+    for comparing in ['distance']:
         df = pd.read_csv(f'results_lab2/{comparing}.csv')   # TODO change
         df = df[df['method'] != 'studentized']              # TODO delete
         for statistic in ['mean', 'median']:#, 'std', 'percentile_5', 'percentile_95', 'corr']:
