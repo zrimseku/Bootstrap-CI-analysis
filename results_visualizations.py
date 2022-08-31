@@ -72,7 +72,7 @@ def compare_alpha_cov_dis_by_n(df=None, comparing='coverage', alpha=0.95,  metho
 
 
 def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.95]}, x='n', row='statistic', col='dgp',
-                         hue='method', save_add=None, title=None, ci=95):
+                         hue='method', save_add=None, title=None, ci=95, scale='linear'):
     if df is None:
         df = pd.read_csv(f'results/{comparing}.csv')
 
@@ -88,7 +88,7 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
 
     g = sns.FacetGrid(df, row=row, col=col, margin_titles=True, sharex=True, sharey='row', palette=colors)
     if comparing == 'coverage':
-        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci)
+        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale)
     else:
         g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=0, whis=[(100-ci)/2, 50 + ci/2])
         ylim = np.nanquantile(df['distance'], (0.01, 0.99))
@@ -114,6 +114,7 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
 def plot_coverage_bars(data, **kwargs):
     colors = kwargs['colors']
     ci = kwargs['ci']
+    scale = kwargs['scale']
     data['ci'] = np.sqrt(data['coverage'] * (1 - data['coverage']) / data['repetitions'])
     if ci != 'se':
         data['ci'] *= scipy.stats.norm.ppf(abs(2*ci/100 - 1))
@@ -134,13 +135,21 @@ def plot_coverage_bars(data, **kwargs):
 
     a = data['alpha'].values[0]
     if a > 0.9:
-        ylim = (0.8, 1)
+        if scale == 'logit':
+            ylim = (0.8, 0.99)
+        else:
+            ylim = (0.8, 1)
     elif a < 0.1:
         ylim = (0, 0.2)
     else:
         ylim = (a - 0.1, a + 0.1)
+
     ax = plt.gca()
+
+    ax.set_yscale(scale)
+
     ax.set(ylim=ylim)
+
     ax.axhline(a, linestyle='--', color='gray')
 
     ax.set_xlabel('n')
@@ -148,8 +157,8 @@ def plot_coverage_bars(data, **kwargs):
     plt.xticks(bar_pos, sorted(data['n'].unique()))
 
 
-def main_plot_comparison(B_as_method=False, filter_by={}, additional=''):
-    for comparing in ['distance']:
+def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear'):
+    for comparing in ['coverage']:
         df = pd.read_csv(f'results_lab2/{comparing}.csv')   # TODO change
         df = df[df['method'] != 'studentized']              # TODO delete
         for statistic in ['mean', 'median', 'std', 'percentile_5', 'percentile_95', 'corr']:
@@ -164,7 +173,7 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional=''):
                         continue
                     title = f'{comparing}s for {statistic} using B = {B}'
                     compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
-                                         col='dgp', title=title, save_add=f'{statistic}_{B}{additional}')
+                                         col='dgp', title=title, save_add=f'{statistic}_{B}{additional}', scale=scale)
 
 
 if __name__ == '__main__':
@@ -172,7 +181,7 @@ if __name__ == '__main__':
     cov = cov[cov['method'] != 'studentized']
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison(filter_by={'method': bts_methods}, additional='_only_bts_v2')
+    main_plot_comparison(filter_by={'method': bts_methods}, additional='_only_bts_logit', scale='logit')
 
     # compare_all_cov_dis(cov, 'coverage', methods, [10], [5, 10])
     # compare_alpha_cov_dis_by_n(cov, 'coverage', 0.95, methods, [10], [5, 10])
