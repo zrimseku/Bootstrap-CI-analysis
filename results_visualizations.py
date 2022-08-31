@@ -90,7 +90,8 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
     if comparing == 'coverage':
         g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale)
     else:
-        g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=0, whis=[(100-ci)/2, 50 + ci/2])
+        g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=0, whis=[(100-ci)/2, 50 + ci/2],
+              palette=colors)
         ylim = np.nanquantile(df['distance'], (0.01, 0.99))
         g.set(ylim=ylim)
 
@@ -117,7 +118,7 @@ def plot_coverage_bars(data, **kwargs):
     scale = kwargs['scale']
     data['ci'] = np.sqrt(data['coverage'] * (1 - data['coverage']) / data['repetitions'])
     if ci != 'se':
-        data['ci'] *= scipy.stats.norm.ppf(abs(2*ci/100 - 1))
+        data['ci'] *= scipy.stats.norm.ppf(0.5 + ci/200)
     data['low'] = data['coverage'] - data['ci']
 
     n_levels = len(data['method'].unique())
