@@ -1,5 +1,7 @@
 import time
 
+import matplotlib.cm
+import scipy.stats
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -70,42 +72,33 @@ def compare_alpha_cov_dis_by_n(df=None, comparing='coverage', alpha=0.95,  metho
 
 
 def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.95]}, x='n', row='statistic', col='dgp',
-                         hue='method', save_add=None, title=None):
+                         hue='method', save_add=None, title=None, ci=95):
     if df is None:
         df = pd.read_csv(f'results/{comparing}.csv')
 
     for key in filter_by.keys():
         df = df[df[key].isin(filter_by[key])]
 
-    colors = {m: c for (m, c) in zip(df['method'].unique(),
-                                     iter(plt.cm.jet(np.linspace(0.05, 0.95, df['method'].nunique()))))}
+    nm = df['method'].nunique()
+    if nm > 10:
+        cols = plt.cm.tab20(np.linspace(0.05, 0.95, df['method'].nunique()))
+    else:
+        cols = plt.cm.tab10(np.linspace(0.05, 0.95, df['method'].nunique()))
+    colors = {m: c for (m, c) in zip(df['method'].unique(), cols)}
 
     g = sns.FacetGrid(df, row=row, col=col, margin_titles=True, sharex=True, sharey='row', palette=colors)
     if comparing == 'coverage':
-        g.map(sns.pointplot, x, comparing, hue, hue_order=df[hue].unique(), dodge=1, scale=0.5, join=False,
-              palette=colors)
+        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci)
     else:
-        g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=1)
+        g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=0, whis=[(100-ci)/2, 50 + ci/2])
         ylim = np.nanquantile(df['distance'], (0.01, 0.99))
         g.set(ylim=ylim)
 
-    if (row == 'alpha' or col == 'alpha') and comparing == 'coverage':
-        g.map(plot_alpha_lines, 'alpha')
-        g.map(plot_errorlines, 'coverage', 'n', 'method', 'repetitions')
-
-        g.map(set_ylims, 'alpha')
-
-        for ax in g.axes[df['alpha'].nunique() - 1, :]:
-            ax.set_xlabel(x)
-        for ax in g.axes[:, 0]:
-            ax.set_ylabel('coverage')
-
-    if comparing == 'distance':
         for axs in g.axes:
             for ax in axs:
                 ax.axhline(0, linestyle='--', color='gray')
 
-    g.add_legend()
+    g.add_legend(title='method')
 
     if title is not None:
         g.fig.subplots_adjust(top=0.95)
@@ -118,34 +111,28 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
         plt.show()
 
 
-def plot_alpha_lines(alphas, **kwargs):
-    ax = plt.gca()
-    ax.axhline(alphas.values[0], linestyle='--', color='gray')
+def plot_coverage_bars(data, **kwargs):
+    colors = kwargs['colors']
+    ci = kwargs['ci']
+    data['ci'] = np.sqrt(data['coverage'] * (1 - data['coverage']) / data['repetitions'])
+    if ci != 'se':
+        data['ci'] *= scipy.stats.norm.ppf(abs(2*ci/100 - 1))
+    data['low'] = data['coverage'] - data['ci']
 
+    n_levels = len(data['method'].unique())
+    group_width = 0.8
+    bar_width = group_width / n_levels
+    offsets = np.linspace(0, group_width - bar_width, n_levels)
+    offsets -= offsets.mean()
 
-def plot_errorlines(coverages, ns, methods, repetitions, **kwargs):
-    ax = plt.gca()
-    err = np.sqrt(coverages * (1 - coverages) / repetitions)
-    x_coords = []
-    y_coords = []
-    err_ordered = []
-    i = 0
-    nc = len(ax.collections)
-    for point_pair in ax.collections:
-        mc = point_pair.get_offsets().shape[0]
-        j = 0
-        for x, y in point_pair.get_offsets():
-            x_coords.append(x)
-            y_coords.append(y)
-            err_ordered.append(err.values[mc * j + i])
-            j += 1
-        i += 1
-    # x_coords = np.array(range(35)) / 7
-    ax.errorbar(x=x_coords, y=y_coords, yerr=err, fmt='none', color='black')
+    bar_pos = np.arange(data['n'].nunique())
+    for i, method in enumerate(data['method'].unique()):
+        data_m = data[data['method'] == method]
+        offset = bar_pos + offsets[i]
+        plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['coverage'], ec='k', label=method, color=colors[i])
+        plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['low'], ec='k', color=colors[i])
 
-
-def set_ylims(alphas, **kwargs):
-    a = alphas.values[0]
+    a = data['alpha'].values[0]
     if a > 0.9:
         ylim = (0.8, 1)
     elif a < 0.1:
@@ -154,13 +141,18 @@ def set_ylims(alphas, **kwargs):
         ylim = (a - 0.1, a + 0.1)
     ax = plt.gca()
     ax.set(ylim=ylim)
+    ax.axhline(a, linestyle='--', color='gray')
+
+    ax.set_xlabel('n')
+    ax.set_ylabel('coverage')
+    plt.xticks(bar_pos, sorted(data['n'].unique()))
 
 
 def main_plot_comparison(B_as_method=False, filter_by={}, additional=''):
     for comparing in ['distance']:
         df = pd.read_csv(f'results_lab2/{comparing}.csv')   # TODO change
         df = df[df['method'] != 'studentized']              # TODO delete
-        for statistic in ['mean', 'median']:#, 'std', 'percentile_5', 'percentile_95', 'corr']:
+        for statistic in ['mean', 'median', 'std', 'percentile_5', 'percentile_95', 'corr']:
             if B_as_method:
                 # a povprečit a vzet samo enega od B-jev za ostale metode?
                 pass
@@ -172,7 +164,7 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional=''):
                         continue
                     title = f'{comparing}s for {statistic} using B = {B}'
                     compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
-                                         col='dgp', title=title, save_add=None)#save_add=f'{statistic}_{B}{additional}')
+                                         col='dgp', title=title, save_add=f'{statistic}_{B}{additional}')
 
 
 if __name__ == '__main__':
@@ -180,7 +172,7 @@ if __name__ == '__main__':
     cov = cov[cov['method'] != 'studentized']
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison(filter_by={'method': bts_methods}, additional='_only_bts')
+    main_plot_comparison(filter_by={'method': bts_methods}, additional='_only_bts_v2')
 
     # compare_all_cov_dis(cov, 'coverage', methods, [10], [5, 10])
     # compare_alpha_cov_dis_by_n(cov, 'coverage', 0.95, methods, [10], [5, 10])
