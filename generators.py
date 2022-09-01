@@ -50,7 +50,7 @@ class DGPExp(DGP):
         self.scale = scale                      # 1/lambda
         self.true_statistics['mean'] = scale
         self.true_statistics['median'] = scale * np.log(2)
-        self.true_statistics['std'] = scale ** 2
+        self.true_statistics['std'] = scale
         self.true_statistics['percentile_5'] = scale * np.log(20/19)
         self.true_statistics['percentile_95'] = scale * np.log(20)
 
