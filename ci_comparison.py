@@ -80,16 +80,6 @@ class CompareIntervals:
                 ci[method] = scipy.stats.t.ppf(self.alphas, df=self.n - 1, loc=stat, scale=se)
                 self.times[method].append(time.time() - t)
 
-            # elif method == 'sign':
-            #     t = time.time()
-            #     sorted_data = sorted(data) + [np.inf]  # inf for taking all points?
-            #     p = 0.5  # if self.statistic.__name__ == 'median' else np.mean(data > self.statistic(data))  # TODO ??
-            #     # returning open intervals (-inf, alpha)
-            #     possible_intervals = scipy.stats.binom.cdf(range(self.n + 1), self.n, p)
-            #     # TODO interpolate -> usklajevanje z ostalimi!!!
-            #     ci[method] = [sorted_data[int(np.sum(possible_intervals < a))] for a in self.alphas]
-            #     self.times[method].append(time.time() - t)
-
             elif method == 'wilcoxon':
                 t = time.time()
                 m = int(self.n * (self.n + 1) / 2)
@@ -365,7 +355,12 @@ class CompareIntervals:
             plt.savefig(f'images/times_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
             plt.close()
 
-        return res, coverage_df, df_length, df_times, df_distance
+        true_val = self.dgp.get_true_value(self.statistic.__name__)
+        df_intervals = pd.DataFrame([{'method': m, 'alpha': a, 'predicted': v, 'true_value': true_val}
+                                     for m in self.computed_intervals.keys() for a in self.computed_intervals[m].keys()
+                                     for v in self.computed_intervals[m][a]])
+
+        return res, coverage_df, df_length, df_times, df_distance, df_intervals
 
 
 def compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha):
@@ -401,7 +396,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alphas_to_draw=[0.05, 0.95], length=0.9,
                    append=True, nr_processes=32, dont_repeat=False):
-    names = ['coverage', 'length', 'times', 'distance']
+    names = ['coverage', 'length', 'times', 'distance', 'intervals']
     all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
                    'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
                    'ci_corr_spearman']
@@ -462,9 +457,9 @@ def multiprocess_run_function(param_tuple):
     statistic, methods, dgp, n, B, alphas = pars
     use_jit = (repetitions >= 100)
     comparison = CompareIntervals(*pars, use_jit=use_jit)
-    _, coverage_df, df_length, df_times, df_distance = comparison.plot_results(repetitions=repetitions,
-                                                                               length=length)
-    dfs = [coverage_df, df_length, df_times, df_distance]
+    _, coverage_df, df_length, df_times, df_distance, df_intervals = comparison.plot_results(repetitions=repetitions,
+                                                                                             length=length)
+    dfs = [coverage_df, df_length, df_times, df_distance, df_intervals]
     comparison.draw_intervals(alphas_to_draw)
     df_length['CI'] = length
     for i in range(len(dfs)):
@@ -549,13 +544,12 @@ if __name__ == '__main__':
     # print(comparison.computed_intervals)
     # print({m: [comparison.computed_intervals[m][a][-1] for a in [0.025, 0.975]] for m in comparison.methods})
 
-    dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5), DGPLaplace(seed, 0, 1),
-            DGPCategorical(seed, np.array([0.1, 0.3, 0.5, 0.1])), DGPLogNorm(seed, 0, 1),
+    dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5),
+            DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
-    dgps = [DGPNorm(seed, 0, 1)]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
-    ns = [5, 10, 20, 50, 100]
-    Bs = [1000, 100]#, 1000]
+    ns = [4, 8, 16, 32, 64, 128, 256]
+    Bs = [10, 100, 1000]
     repetitions = 10
     run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=False)
 
