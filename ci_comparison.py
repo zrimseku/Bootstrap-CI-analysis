@@ -267,7 +267,10 @@ class CompareIntervals:
         colors = iter(plt.cm.jet(np.linspace(0.05, 0.95, len(self.methods))))
         plt.hist(bts.statistic_values, bins=30, label='statistic')
         if 'smoothed' in self.methods:
-            plt.hist(bts.statistic_values_noise, bins=30, label='smoothed stat.', alpha=0.3)
+            if np.nan in bts.statistic_values_noise:
+                print('skipped drawing of smoothed values because of nan values.')      # TODO why are they here?
+            else:
+                plt.hist(bts.statistic_values_noise, bins=30, label='smoothed stat.', alpha=0.3)
         for method in self.methods:
             col = next(colors)
             for alpha in alphas_to_draw:
@@ -400,7 +403,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 
 def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alphas_to_draw=[0.05, 0.95], length=0.9,
-                   append=True, nr_processes=32, dont_repeat=False):
+                   append=True, nr_processes=24, dont_repeat=False):
     names = ['coverage', 'length', 'times', 'distance']
     all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
                    'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
@@ -444,7 +447,8 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
 
                     params.append((statistic, methods_par, dgp, n, B, alphas.copy()))
 
-    print(f'Skipped {nr_skipped} combinations, because we already have results.')
+    if dont_repeat:
+        print(f'Skipped {nr_skipped} combinations, because we already have results.')
     
     pool = Pool(processes=nr_processes)
     for dfs in tqdm(pool.imap_unordered(multiprocess_run_function, zip(params, repeat(repetitions), repeat(length),
@@ -516,46 +520,23 @@ if __name__ == '__main__':
 
     # warnings.showwarning = warn_with_traceback
 
-    statistic = np.median
-    n = 10
-    B = 2000
-    alpha = 0.9
+    # statistic = np.median
+    # n = 10
+    # B = 2000
+    # alpha = 0.9
     seed = 0
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
     methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
-    # compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha)
 
-    # jackknife-after-bootstrap
-    # our
-    # = Bootstrap(data, statistic)
-    # our_ci = our.ci(coverage=alpha, nr_bootstrap_samples=B, method='percentile', seed=0)
-    # our.jackknife_after_bootstrap([lambda x: np.quantile(x, 0.05), lambda x: np.quantile(x, 0.1), np.mean, np.median,
-    #                                lambda x: np.quantile(x, 0.9), lambda x: np.quantile(x, 0.95)])
-
-    # INTERVAL COMPARISON
-
-    # dgp = DGPNorm(seed, 0, 1)
-    # dgp = DGPBiNorm(seed, np.array([1, 20]), np.array([[3, 2], [2, 2]]))
-
-    # comparison = CompareIntervals(statistic, methods, dgp, n, B, alphas)
-    # res, _, _, _, _ = comparison.plot_results(repetitions=100)
-    # for cm, name in zip(res, ['coverages', 'times_stats', 'length_stats', 'shape_stats', 'distance_from_exact_stats']):
-    #     print(name, cm)
     #
-    # comparison.draw_intervals([0.1, 0.9])
-
-    # comparison = CompareIntervals(statistic, methods, dgp, 15, B, [0.025, 0.975] + alphas)
-    # comparison.compute_non_bootstrap_intervals(np.array([3.7, -4.7, 6.5, -6.9, -7.8, 8.7, 9.1, 10.1, 10.8, 13.6, 14.4, 15.6, 20.2, 22.4, 23.5]))
-    # print(comparison.computed_intervals)
-    # print({m: [comparison.computed_intervals[m][a][-1] for a in [0.025, 0.975]] for m in comparison.methods})
-
-    dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5), DGPLaplace(seed, 0, 1),
-            DGPCategorical(seed, np.array([0.1, 0.3, 0.5, 0.1])), DGPLogNorm(seed, 0, 1),
+    dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5),
+            DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
-    dgps = [DGPNorm(seed, 0, 1)]
+    # dgps = [DGPNorm(seed, 0, 1)]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
     ns = [5, 10, 20, 50, 100]
-    Bs = [1000, 100]#, 1000]
-    repetitions = 10
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=True)
+    Bs = [10, 100, 1000]        # TODO 10000
+    repetitions = 1000
+    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=24, dont_repeat=True, append=True)
+
 
