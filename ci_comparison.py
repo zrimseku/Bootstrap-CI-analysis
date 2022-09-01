@@ -47,13 +47,12 @@ class CompareIntervals:
         bts.evaluate_statistic()
         ts = time.time() - t            # time needed for sampling (will add it to all methods)
         for method in self.methods:
-            # TODO: avoid new computations for each alpha?
             if method not in bts.implemented_methods:
                 continue
             t = time.time()
-            for alpha in self.alphas:
-                ci = bts.ci(coverage=alpha, side='one', method=method, quantile_type=self.quantile_type)
-                self.computed_intervals[method][alpha].append(ci[0])
+            cis = bts.ci(coverages=self.alphas, side='one', method=method, quantile_type=self.quantile_type)
+            for a, ci in zip(self.alphas, cis):
+                self.computed_intervals[method][a].append(ci)
             self.times[method].append(time.time() - t + ts)
             # print('finished', method)
         return bts
@@ -201,10 +200,6 @@ class CompareIntervals:
                                                      self.computed_intervals['exact'][alpha] for alpha in self.alphas}
                                      for method in self.methods}
 
-        # distance_from_exact_stats = {method: {alpha: {'mean': np.mean(self.distances_from_exact[method][alpha]),
-        #                                               'std': np.std(self.distances_from_exact[method][alpha])}
-        #                                       for alpha in self.alphas} for method in self.methods}
-
         if length is not None:
             low_alpha, high_alpha = [round((1 - length) / 2, 5), round((length + 1) / 2, 5)]
             if low_alpha not in self.alphas or high_alpha not in self.alphas:
@@ -219,23 +214,10 @@ class CompareIntervals:
                                 np.array(self.computed_intervals[method][low_alpha][-repetitions:])
                         for method in self.methods}
 
-        # length_stats = {method: {'mean': np.mean(self.lengths[method]), 'std': np.std(self.lengths[method])}
-        #                 for method in self.methods}
-
-        # for method in self.methods:
-        #     if 0 in stat_original - np.array(self.computed_intervals[method][low_alpha][-repetitions:]):
-        #         print(method, self.statistic, self.dgp, self.n, self.b)
-        # shapes = {method: (np.array(self.computed_intervals[method][high_alpha][-repetitions:]) - stat_original) /
-        #                   (stat_original - np.array(self.computed_intervals[method][low_alpha][-repetitions:]))
-        #           for method in self.methods}
-
-        # shape_stats = {method: {'mean': np.mean(shapes[method]), 'std': np.std(shapes[method])}
-        #                for method in self.methods}
-
         times_stats = {method: {'mean': np.mean(self.times[method]), 'std': np.std(self.times[method])}
                        for method in self.methods}
 
-        return self.coverages, times_stats  # , length_stats, distance_from_exact_stats
+        return self.coverages, times_stats
 
     def draw_intervals(self, alphas_to_draw: list[float], show=False):
         data = self.dgp.sample(sample_size=self.n)
@@ -404,7 +386,8 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
     cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
             'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
             'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
-            'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods}
+            'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
+            'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n', 'B', 'repetitions']}
 
     if not append:
         for name in names:
@@ -446,7 +429,6 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
     for dfs in tqdm(pool.imap_unordered(multiprocess_run_function, zip(params, repeat(repetitions), repeat(length),
                                                                        repeat(alphas_to_draw)), chunksize=1),
                     total=len(params)):
-
         for i in range(len(dfs)):
 
             dfs[i] = pd.concat([pd.DataFrame(columns=cols[names[i]]), dfs[i]])      # setting right order of columns
@@ -484,28 +466,6 @@ def percentile_5(data):
 
 def percentile_95(data):
     return np.quantile(data, 0.95, method='median_unbiased')
-
-
-# def mean(data):
-#     return np.mean(data, axis=0)
-#
-#
-# def median(data):
-#     return np.median(data, axis=0)
-#
-#
-# def std(data):
-#     return np.std(data, axis=0)
-
-# import traceback
-# import warnings
-# import sys
-#
-#
-# def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-#     log = file if hasattr(file, 'write') else sys.stderr
-#     traceback.print_stack(file=log)
-#     log.write(warnings.formatwarning(message, category, filename, lineno, line))
 
 
 if __name__ == '__main__':
@@ -548,9 +508,10 @@ if __name__ == '__main__':
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5),
             DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
+    dgps = [DGPNorm(seed, 0, 1)]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
     ns = [4, 8, 16, 32, 64, 128, 256]
-    Bs = [10, 100, 1000]
+    Bs = [10, 100]#, 1000]
     repetitions = 10
     run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=False)
 
