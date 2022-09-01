@@ -88,7 +88,8 @@ class CompareIntervals:
                 conf = np.concatenate([conf_half, (1 - conf_half)[::-1]])
                 w_sums = sorted([(data[i] + data[j]) / 2 for i in range(self.n) for j in range(i, self.n)])
                 from_start = [sum(conf < a) for a in self.alphas]
-                ci[method] = [w_sums[f] for f in from_start]
+                # nan if requested coverage is not achievable
+                ci[method] = [w_sums[f] if f < self.n else np.nan for f in from_start]
                 self.times[method].append(time.time() - t)
 
             elif method in ['ci_quant_param', 'ci_quant_nonparam']:
@@ -104,7 +105,7 @@ class CompareIntervals:
 
                 elif method == 'ci_quant_nonparam':
                     t = time.time()
-                    sorted_data = np.array(sorted(data) + [np.inf])
+                    sorted_data = np.array(sorted(data) + [np.nan])
                     ci[method] = sorted_data[scipy.stats.binom.ppf(self.alphas, self.n, quant).astype(int)]
 
                 self.times[method].append(time.time() - t)
