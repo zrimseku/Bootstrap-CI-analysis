@@ -50,7 +50,7 @@ class DGPExp(DGP):
         self.scale = scale                      # 1/lambda
         self.true_statistics['mean'] = scale
         self.true_statistics['median'] = scale * np.log(2)
-        self.true_statistics['std'] = scale ** 2
+        self.true_statistics['std'] = scale
         self.true_statistics['percentile_5'] = scale * np.log(20/19)
         self.true_statistics['percentile_95'] = scale * np.log(20)
 
@@ -69,7 +69,7 @@ class DGPBeta(DGP):
         self.alpha = alpha
         self.beta = beta
         self.true_statistics['mean'] = alpha / (alpha + beta)
-        self.true_statistics['std'] = alpha * beta / (alpha + beta) ** 2 / (alpha + beta + 1)
+        self.true_statistics['std'] = np.sqrt(alpha * beta / (alpha + beta) ** 2 / (alpha + beta + 1))
         self.true_statistics['percentile_5'] = scipy.stats.beta.ppf(0.05, alpha, beta)
         self.true_statistics['percentile_95'] = scipy.stats.beta.ppf(0.95, alpha, beta)
         self.true_statistics['median'] = scipy.stats.beta.ppf(0.5, alpha, beta)
