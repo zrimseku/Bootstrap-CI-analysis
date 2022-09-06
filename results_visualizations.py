@@ -177,30 +177,55 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                                          col='dgp', title=title, save_add=f'{statistic}_{B}{additional}', scale=scale)
 
 
+def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=None, save_add=None, scale='linear',
+                            ci=95):
+    df = pd.read_csv(f'results_lab/{comparing}.csv')
+
+    if filter_by is not None:
+        for key in filter_by.keys():
+            df = df[df[key].isin(filter_by[key])]
+
+    id_vars = ['dgp', 'statistic', 'n', 'B', 'repetitions']
+    if comparing == 'length':
+        id_vars.append('CI')
+    df_long = pd.melt(df, id_vars=id_vars).dropna()
+
+    df_long = df_long[df_long['variable'] != 'studentized']        # TODO DELETE
+
+    nm = df_long['variable'].nunique()
+    if nm > 10:
+        cols = plt.cm.tab20(np.linspace(0.05, 0.95, df_long['variable'].nunique()))
+    else:
+        cols = plt.cm.tab10(np.linspace(0.05, 0.95, df_long['variable'].nunique()))
+    colors = {m: c for (m, c) in zip(df_long['variable'].unique(), cols)}
+
+    g = sns.FacetGrid(df_long, row='n', col='statistic', margin_titles=True, palette=colors)
+    g.map(sns.boxplot, 'B', 'value', 'variable', hue_order=df_long['variable'].unique(), palette=colors, fliersize=0,
+          whis=[(100-ci)/2, 50 + ci/2])
+    g.add_legend(title='method')
+
+    g.set(yscale=scale)
+    g.set_axis_labels(y_var=comparing)
+
+    if title is not None:
+        g.fig.subplots_adjust(top=0.95)
+        g.fig.suptitle(title, fontsize=16)
+
+    if save_add is not None:
+        plt.savefig(f'images/comparison/only_bts/{comparing}_{save_add}.png')
+        plt.close()
+    else:
+        plt.show()
+
+
 if __name__ == '__main__':
     cov = pd.read_csv('results_lab/coverage.csv')  # TODO change from lab and include studentized
     cov = cov[cov['method'] != 'studentized']
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison(filter_by={'method': bts_methods}, additional='_only_bts_logit', scale='logit')
+    # main_plot_comparison(filter_by={'method': bts_methods}, additional='_only_bts_logit', scale='linear')
 
-    # compare_all_cov_dis(cov, 'coverage', methods, [10], [5, 10])
-    # compare_alpha_cov_dis_by_n(cov, 'coverage', 0.95, methods, [10], [5, 10])
-
-    # compare_cov_dis_grid(cov, filter_by={'method': methods}, x='n', row='alpha', col='dgp', title='kdsfl kdfjs lk')
-    # compare_cov_dis_grid(cov, filter_by={'alpha': [0.95], 'method': methods})
-    # compare_cov_dis_grid(cov, filter_by={'n': [100], 'method': methods}, x='alpha')
-    # compare_cov_dis_grid(cov, filter_by={'method': methods}, x='alpha', row='n')
-
-    # dis = pd.read_csv('results_lab/distance.csv')
-    # dis = dis[dis['method'] != 'studentized']
-    #
-    # compare_all_cov_dis(dis, 'distance', methods, [10], [5, 10])
-    # compare_alpha_cov_dis_by_n(dis, 'distance', 0.95, methods, [10], [5, 10])
-    #
-    # compare_cov_dis_grid(dis, 'distance', filter_by={'alpha': [0.95], 'method': methods})
-    # compare_cov_dis_grid(dis, 'distance', filter_by={'n': [100], 'method': methods}, x='alpha')
-    # compare_cov_dis_grid(dis, 'distance', filter_by={'method': methods}, x='alpha', row='n')
+    plot_times_lengths_grid('length', scale='linear')
 
 
 
