@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import scipy.stats
 from tqdm import tqdm
@@ -186,3 +188,46 @@ class DGPBiNorm(DGP):
         return type(self).__name__ + '_'.join([str(par) for par in [self.mean[0], self.mean[1], self.cov[0, 0],
                                                                     self.cov[0, 1], self.cov[1, 1]]])
 
+
+class DGPRandEff(DGP):
+
+    def __init__(self, seed: 0, mean: float, stds: list, true_statistics: dict = {}):
+        super(DGPRandEff, self).__init__(seed, true_statistics)
+        self.group_indices = []
+        self.mean = mean
+        self.stds = stds
+        self.true_statistics['mean'] = mean
+        self.true_statistics['median'] = mean
+        self.true_statistics['std'] = stds  # TODO this depends on strategy, what to do?
+
+    def sample(self, group_sizes: list, nr_samples: int = 1) -> np.array:
+        # TODO check if group_sizes has same depth as stds
+        counter = itertools.count()
+
+        def get_indices(sizes, cnt):
+            if isinstance(sizes, int):
+                return [next(cnt) for _ in range(sizes)]
+            else:
+                return [get_indices(sizes[j], cnt) if isinstance(sizes[j], int) else
+                        get_indices(sizes[j], cnt) for j in range(len(sizes))]
+
+        self.group_indices = get_indices(group_sizes, counter)
+
+        sample_size = next(counter)
+        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
+        data = np.zeros(size) + self.mean
+
+        def add_error(indices, data, depth, err):
+            if isinstance(indices, int):
+                data[indices] += err
+            else:
+                for inds in indices:
+                    add_error(inds, data, depth + 1, err + np.random.normal(0, self.stds[depth]))
+
+        add_error(self.group_indices, data, 0, 0)
+        return data
+
+
+if __name__ == '__main__':
+    dgp = DGPRandEff(0, 0, [100, 10, 1, 0.1])
+    print(dgp.sample([[[3, 4, 5], [2, 3]], [[3, 4, 5], [2, 3]]], 1))
