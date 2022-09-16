@@ -199,8 +199,10 @@ class DGPRandEff(DGP):
         self.true_statistics['mean'] = mean
         self.true_statistics['median'] = mean
         self.true_statistics['std'] = stds  # TODO this depends on strategy, what to do? also other statistics
+        self.group_sizes = None
 
     def sample(self, group_sizes: list = None, nr_samples: int = 1, max_group_sizes: list = None) -> np.array:
+        # TODO if nr_samples != 1, all samples have the same group_sizes -> OK?
         if group_sizes is None:
             # we will generate groups on random, based on specified max sizes on each level
             if len(self.stds) != len(max_group_sizes):
@@ -213,7 +215,7 @@ class DGPRandEff(DGP):
                     else:
                         return [get_sizes(max_sizes[1:]) for _ in range(np.random.randint(1, max_sizes[0]))]
                 group_sizes = get_sizes(max_group_sizes)
-                print(group_sizes)
+                # print(group_sizes)
 
         else:
             # only checking if depths match
@@ -225,6 +227,8 @@ class DGPRandEff(DGP):
             if len(self.stds) != depth:
                 raise ValueError(f'Specified standard deviations of the generator imply different number of levels '
                                  f'({len(self.stds)}) than group_sizes ({depth})!')
+
+        self.group_sizes = group_sizes
 
         counter = itertools.count()
 
@@ -238,18 +242,18 @@ class DGPRandEff(DGP):
         self.group_indices = get_indices(group_sizes, counter)
 
         sample_size = next(counter)
-        size = (nr_samples, sample_size) if nr_samples != 1 else sample_size    # TODO for nr_samples != 1
+        size = (nr_samples, sample_size)
         data = np.zeros(size) + self.mean
 
         def add_error(indices, data, depth, err):
             if isinstance(indices, int):
-                data[indices] += err
+                data[:, indices] += err
             else:
                 for i in range(len(indices)):
                     # self.stds can be lists on each level if we want to set each groups std differently
                     if self.stds[depth] is None:
-                        s = np.random.uniform(0, 1)
-                        print(depth, s)
+                        s = np.random.uniform(0, 1, size=nr_samples)
+                        # print(depth, s)
                     elif isinstance(self.stds[depth], int) or isinstance(self.stds[depth], float):
                         s = self.stds[depth]
                     else:
@@ -259,13 +263,21 @@ class DGPRandEff(DGP):
                                 f'level ({len(self.stds[depth])}) should coincide with the number of groups '
                                 f'of the level ({len(indices)}).')
                         s = self.stds[depth][i]
-                    add_error(indices[i], data, depth + 1, err + np.random.normal(0, s))
+                    add_error(indices[i], data, depth + 1, err + np.random.normal(0, s, size=nr_samples))
 
         add_error(self.group_indices, data, 0, 0)
-        return data
+
+        if nr_samples == 1:
+            return data[0]      # remove unnecessary parenthesis
+        else:
+            return data
+
+    def describe(self):
+        return type(self).__name__ + '_'.join([str(par) for par in [self.mean, self.stds, self.group_sizes]])
 
 
 if __name__ == '__main__':
     dgp = DGPRandEff(0, 0, [100, None, 1, 0.1])
-    print(dgp.sample(max_group_sizes=[3, 4, 5, 4], nr_samples=1))
+    print(dgp.sample(max_group_sizes=[3, 4, 5, 4], nr_samples=3))
+
 
