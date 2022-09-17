@@ -37,9 +37,9 @@ class Bootstrap:
         # TODO: include semi-parametric and parametric sampling
         if seed is not None:
             np.random.seed(seed)
+        self.b = nr_bootstrap_samples
 
         if sampling == 'nonparametric':
-            self.b = nr_bootstrap_samples
             self.bootstrap_indices = np.random.choice(range(self.n), size=[nr_bootstrap_samples, self.n])
 
         elif sampling == 'hierarchical':
@@ -47,14 +47,23 @@ class Bootstrap:
             strategy = sampling_args['strategy']        # with (True) or without (False) replacement on each level
 
             if method == 'cases':
-                groups = [self.group_indices.copy()]
+                groups_n = [[self.group_indices.copy()] for _ in range(nr_bootstrap_samples)]
                 for s in strategy:
                     if s:       # with replacement
-                        gr_indices = [np.random.randint(len(g), size=len(g)) for g in groups]
-                        groups = list(itertools.chain.from_iterable([[g[i] for i in ids]
-                                                                     for ids, g in zip(gr_indices, groups)]))
+                        gr_indices_n = [[np.random.randint(len(g), size=len(g)) for g in groups] for groups in groups_n]
+                        groups_n = [list(itertools.chain.from_iterable([[g[i] for i in ids]
+                                                                        for ids, g in zip(gr_indices, groups)]))
+                                    for gr_indices, groups in zip(gr_indices_n, groups_n)]
                     else:       # without replacement
-                        groups = list(itertools.chain.from_iterable(groups))
+                        groups_n = [list(itertools.chain.from_iterable(groups)) for groups in groups_n]
+
+                self.bootstrap_indices = groups_n  # can't be numpy array as lengths can be different
+
+            else:
+                raise ValueError(f'Method {method} of hierarchical sampling is not implemented. Choose between cases'
+                                 f'and random-effect.')
+
+
 
         else:
             raise ValueError(f'{sampling} sampling is not implemented. Choose between nonparametric and hierarchical.')
@@ -315,3 +324,14 @@ def wrapped_percentile_5(data):
 @njit()
 def wrapped_percentile_95(data):
     return np.quantile(data, 0.95)  # , method='median_unbiased')
+
+
+
+if __name__ == '__main__':
+
+    b = Bootstrap(np.random.normal(0, 1, size=10), statistic=np.mean,
+                  group_indices=[[[0, 1], [2, 3, 4]], [[5, 6], [7, 8, 9]]])
+
+    b.sample(10, 1, sampling='hierarchical', sampling_args={'method': 'cases', 'strategy': [False, True, True]})
+
+    print(b.bootstrap_indices)
