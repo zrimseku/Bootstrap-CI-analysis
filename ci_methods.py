@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import scipy.stats
 from numba import njit
@@ -10,7 +12,7 @@ import matplotlib.pyplot as plt
 
 class Bootstrap:
 
-    def __init__(self, data: np.array, statistic: callable, use_jit: bool = False):
+    def __init__(self, data: np.array, statistic: callable, use_jit: bool = False, group_indices: list = None):
         self.original_sample = data
         self.original_statistic_value = statistic(data)
         self.statistic = statistic
@@ -21,21 +23,41 @@ class Bootstrap:
         self.statistic_values_noise = np.empty(0)
         self.implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed', 'double']
         self.use_jit = use_jit
-        # sampling method?
-        # CI method?
+        self.group_indices = group_indices      # hierarchical structure needed for hierarchical bootstrap
 
-    def sample(self, nr_bootstrap_samples: int = 1000, seed: int = None, sampling: str = 'nonparametric'):
+    def sample(self, nr_bootstrap_samples: int = 1000, seed: int = None, sampling: str = 'nonparametric',
+               sampling_args: dict = None):
         """
         Draws bootstrap samples from original dataset.
         :param nr_bootstrap_samples: TODO
         :param seed:
         :param sampling:
+        :param sampling_args:
         """
         # TODO: include semi-parametric and parametric sampling
         if seed is not None:
             np.random.seed(seed)
-        self.b = nr_bootstrap_samples
-        self.bootstrap_indices = np.random.choice(range(self.n), size=[nr_bootstrap_samples, self.n])
+
+        if sampling == 'nonparametric':
+            self.b = nr_bootstrap_samples
+            self.bootstrap_indices = np.random.choice(range(self.n), size=[nr_bootstrap_samples, self.n])
+
+        elif sampling == 'hierarchical':
+            method = sampling_args['method']            # cases / random-effect / residuals?
+            strategy = sampling_args['strategy']        # with (True) or without (False) replacement on each level
+
+            if method == 'cases':
+                groups = [self.group_indices.copy()]
+                for s in strategy:
+                    if s:       # with replacement
+                        gr_indices = [np.random.randint(len(g), size=len(g)) for g in groups]
+                        groups = list(itertools.chain.from_iterable([[g[i] for i in ids]
+                                                                     for ids, g in zip(gr_indices, groups)]))
+                    else:       # without replacement
+                        groups = list(itertools.chain.from_iterable(groups))
+
+        else:
+            raise ValueError(f'{sampling} sampling is not implemented. Choose between nonparametric and hierarchical.')
 
     def evaluate_statistic(self, noise: np.array = None, sampling: str = 'nonparametric'):
         """Evaluates statistic on bootstrapped datasets"""
