@@ -90,22 +90,18 @@ class Bootstrap:
                 # sampling of predictors to build bootstrap samples
                 sampled_pred = [pred[np.random.randint(len(pred), size=(self.b, len(pred)))] for pred in predictors]
 
-                self.bootstrap_values = 0
-                for pred, size in zip(sampled_pred[:-1], group_sizes):
-                    self.bootstrap_values += np.repeat(pred, size)
-
-                self.bootstrap_values += sampled_pred[-1]
+                self.bootstrap_values = sampled_pred[0]
+                for pred, size in zip(sampled_pred[1:], group_sizes):
+                    self.bootstrap_values = np.repeat(self.bootstrap_values, size, axis=1) + pred
 
             else:
                 raise ValueError(f'Method {method} of hierarchical sampling is not implemented. Choose between cases'
                                  f'and random-effect.')
 
-
-
         else:
             raise ValueError(f'{sampling} sampling is not implemented. Choose between nonparametric and hierarchical.')
 
-    def evaluate_statistic(self, noise: np.array = None, sampling: str = 'nonparametric'):
+    def evaluate_statistic(self, noise: np.array = None, sampling: str = 'nonparametric', sampling_args: dict = None):
         """Evaluates statistic on bootstrapped datasets"""
         if np.size(self.original_statistic_value) == 1:
             self.statistic_values = np.zeros(self.b)
@@ -114,6 +110,7 @@ class Bootstrap:
 
         if noise is not None:
             # save statistic values with noise separately, so we don't override the original ones when calling smoothed
+            # TODO for random-effect if needed
             if np.size(self.original_statistic_value) == 1:
                 self.statistic_values_noise = np.zeros(self.b)
             else:
@@ -121,9 +118,13 @@ class Bootstrap:
 
             statistic_input_noise = self.original_sample[self.bootstrap_indices]
             statistic_input_noise += noise
+
         for i in range(self.b):
-            # do we want to call statistic in a vectorized way, to avoid the for loop? Pomojem ne, za splošnost?
-            self.statistic_values[i] = self.statistic(self.original_sample[self.bootstrap_indices][i, :])
+            # do we want to call statistic in a vectorized way, to avoid the for loop? TODO allow option
+            if sampling == 'nonparametric' or sampling_args['method'] == 'cases':
+                self.statistic_values[i] = self.statistic(self.original_sample[self.bootstrap_indices][i, :])
+            elif sampling == 'hierarchical' and sampling_args['method'] == 'random-effect':
+                self.statistic_values[i] = self.statistic(self.bootstrap_values[i, :])
             if noise is not None:
                 self.statistic_values_noise[i] = self.statistic(statistic_input_noise[i, :])
 
@@ -263,7 +264,7 @@ class Bootstrap:
         return standard_errors
 
     def nested_bootstrap(self, b_inner):
-
+        # TODO for random-effect if needed
         if self.b >= 500 or b_inner >= 500 or self.n > 100 or self.use_jit:
             stat_njit = {'mean': wrapped_mean, 'median': wrapped_median, 'std': wrapped_std,
                  'percentile_5': wrapped_percentile_5, 'percentile_95': wrapped_percentile_95,
@@ -363,12 +364,15 @@ def wrapped_percentile_95(data):
     return np.quantile(data, 0.95)  # , method='median_unbiased')
 
 
-
 if __name__ == '__main__':
 
     b = Bootstrap(np.random.normal(0, 1, size=10), statistic=np.mean,
                   group_indices=[[[0, 1], [2, 3, 4]], [[5, 6], [7, 8, 9]]])
+    sampling = 'hierarchical'
+    sampling_args = {'method': 'random-effect', 'strategy': [False, True, True]}
+    b.sample(15, 0, sampling=sampling, sampling_args=sampling_args)
 
-    b.sample(10, 1, sampling='hierarchical', sampling_args={'method': 'cases', 'strategy': [False, True, True]})
+    b.evaluate_statistic(sampling=sampling, sampling_args=sampling_args)
+    print(np.mean(b.bootstrap_values, axis=1))
+    print(b.statistic_values)
 
-    print(b.bootstrap_indices)
