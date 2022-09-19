@@ -24,6 +24,7 @@ class Bootstrap:
         self.implemented_methods = ['basic', 'standard', 'percentile', 'bc', 'bca', 'studentized', 'smoothed', 'double']
         self.use_jit = use_jit
         self.group_indices = group_indices      # hierarchical structure needed for hierarchical bootstrap
+        self.bootstrap_values = np.empty(0)     # in random-effect bootstrap we must save the values, not indices
 
     def sample(self, nr_bootstrap_samples: int = 1000, seed: int = None, sampling: str = 'nonparametric',
                sampling_args: dict = None):
@@ -58,6 +59,42 @@ class Bootstrap:
                         groups_n = [list(itertools.chain.from_iterable(groups)) for groups in groups_n]
 
                 self.bootstrap_indices = groups_n  # can't be numpy array as lengths can be different
+
+            elif method == 'random-effect':
+                # calculation of predictors on each level
+                mean = np.mean(self.original_sample)
+                errors = self.original_sample - mean
+
+                def flatten(indices):
+                    if isinstance(indices[0], int):
+                        return indices
+                    else:
+                        return flatten(list(itertools.chain.from_iterable(indices)))
+
+                indices = self.group_indices.copy()
+                predictors = []
+                group_sizes = []
+                while isinstance(indices[0], list):
+                    lvl_indices = [flatten(g) for g in indices]
+                    group_sizes.append([len(g) for g in indices])
+                    lvl_predictors = [np.mean(errors[ind]) for ind in lvl_indices]
+
+                    for pred, ind in zip(lvl_predictors, lvl_indices):
+                        errors[ind] -= pred         # leave only residuals of next level in errors
+
+                    predictors.append(np.array(lvl_predictors))
+                    indices = list(itertools.chain.from_iterable(indices))
+
+                predictors.append(errors)
+
+                # sampling of predictors to build bootstrap samples
+                sampled_pred = [pred[np.random.randint(len(pred), size=(self.b, len(pred)))] for pred in predictors]
+
+                self.bootstrap_values = 0
+                for pred, size in zip(sampled_pred[:-1], group_sizes):
+                    self.bootstrap_values += np.repeat(pred, size)
+
+                self.bootstrap_values += sampled_pred[-1]
 
             else:
                 raise ValueError(f'Method {method} of hierarchical sampling is not implemented. Choose between cases'
