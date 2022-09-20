@@ -202,8 +202,9 @@ class DGPRandEff(DGP):
         self.group_sizes = None
 
     def sample(self, group_sizes: list = None, nr_samples: int = 1, max_group_sizes: list = None) -> np.array:
-        # TODO if nr_samples != 1, all samples have the same group_sizes -> OK?
+        # TODO if nr_samples != 1, all samples have the same group_sizes -> OK? pomoje ne
         # TODO 2: drugačno samplanje da vemo groud truth skupin??
+        # a bi pustil not vsen sample_size, pa generira sam velikosti?
         if group_sizes is None:
             # we will generate groups on random, based on specified max sizes on each level
             if len(self.stds) != len(max_group_sizes):

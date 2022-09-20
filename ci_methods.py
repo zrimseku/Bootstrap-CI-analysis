@@ -122,13 +122,11 @@ class Bootstrap:
         for i in range(self.b):
             # do we want to call statistic in a vectorized way, to avoid the for loop? TODO allow option
             if sampling == 'nonparametric' or sampling_args['method'] == 'cases':
-                self.statistic_values[i] = self.statistic(self.original_sample[self.bootstrap_indices][i, :])
+                self.statistic_values[i] = self.statistic(self.original_sample[self.bootstrap_indices[i]])  # TODO test
             elif sampling == 'hierarchical' and sampling_args['method'] == 'random-effect':
                 self.statistic_values[i] = self.statistic(self.bootstrap_values[i, :])
             if noise is not None:
                 self.statistic_values_noise[i] = self.statistic(statistic_input_noise[i, :])
-
-        # TODO: parametric sampling?
 
     # TODO? For nested we can input sample and indices into evaluate_statistic, to have all evaluations in the same
     #  place? Put "nested" parameter into sampling, to return indices instead of saving them (should we just always
@@ -155,7 +153,7 @@ class Bootstrap:
 
         if len(self.statistic_values) == 0:
             # if method != 'smoothed':  calculate even for smoothed, to get the rule-of-thumb estimation of bandwidth
-            self.evaluate_statistic()
+            self.evaluate_statistic(sampling=sampling, sampling_args=sampling_args)
         quantiles = []
         if side == 'two':
             quantiles = np.array([(1-coverages)/2, 0.5 + coverages/2])
