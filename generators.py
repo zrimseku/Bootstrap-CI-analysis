@@ -275,7 +275,7 @@ class DGPRandEff(DGP):
             return data
 
     def describe(self):
-        return type(self).__name__ + '_' + str(self.mean) + '_' + str(len(self.stds)) + 'lvls'
+        return type(self).__name__ + '_' + str(self.mean) + '_' + str(len(self.stds)) + 'lvl'
         # TODO add info about group sizes?
 
 

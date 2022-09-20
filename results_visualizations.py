@@ -8,9 +8,9 @@ import pandas as pd
 import numpy as np
 
 
-def compare_all_cov_dis(df=None, comparing='coverage', methods=None, Bs=None, ns=None):
+def compare_all_cov_dis(df=None, comparing='coverage', methods=None, Bs=None, ns=None, folder_add=''):
     if df is None:
-        df = pd.read_csv(f'results/{comparing}.csv')
+        df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
 
     if Bs is not None:
         df = df[df['B'].isin(Bs)]
@@ -40,9 +40,10 @@ def compare_all_cov_dis(df=None, comparing='coverage', methods=None, Bs=None, ns
     plt.show()
 
 
-def compare_alpha_cov_dis_by_n(df=None, comparing='coverage', alpha=0.95,  methods=None, Bs=None, ns=None):
+def compare_alpha_cov_dis_by_n(df=None, comparing='coverage', alpha=0.95,  methods=None, Bs=None, ns=None,
+                               folder_add=''):
     if df is None:
-        df = pd.read_csv(f'results/{comparing}.csv')
+        df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
 
     df = df[df['alpha'] == alpha]
 
@@ -72,9 +73,10 @@ def compare_alpha_cov_dis_by_n(df=None, comparing='coverage', alpha=0.95,  metho
 
 
 def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.95]}, x='n', row='statistic', col='dgp',
-                         hue='method', save_add=None, title=None, ci=95, scale='linear'):
+                         hue='method', save_add=None, title=None, ci=95, scale='linear', folder_add='', subfolder='',
+                         set_ylim=False):
     if df is None:
-        df = pd.read_csv(f'results/{comparing}.csv')
+        df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
 
     for key in filter_by.keys():
         df = df[df[key].isin(filter_by[key])]
@@ -88,7 +90,7 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
 
     g = sns.FacetGrid(df, row=row, col=col, margin_titles=True, sharex=True, sharey='row', palette=colors)
     if comparing == 'coverage':
-        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale)
+        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale, set_ylim=set_ylim)
     else:
         g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=0, whis=[(100-ci)/2, 50 + ci/2],
               palette=colors)
@@ -106,7 +108,8 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
         g.fig.suptitle(title, fontsize=16)
 
     if save_add is not None:
-        plt.savefig(f'images/comparison/only_bts/compare_{comparing}_{x}_{row}_{col}_{save_add}.png')
+        plt.savefig(f'images{folder_add}/comparison/{subfolder}/compare_{comparing}_{x}_{row}_{col}_{save_add}.png')
+        print('saved')
         plt.close()
     else:
         plt.show()
@@ -149,7 +152,8 @@ def plot_coverage_bars(data, **kwargs):
 
     ax.set_yscale(scale)
 
-    ax.set(ylim=ylim)
+    if kwargs['set_ylim']:
+        ax.set(ylim=ylim)
 
     ax.axhline(a, linestyle='--', color='gray')
 
@@ -158,9 +162,9 @@ def plot_coverage_bars(data, **kwargs):
     plt.xticks(bar_pos, sorted(data['n'].unique()))
 
 
-def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear'):
-    for comparing in ['coverage']:
-        df = pd.read_csv(f'results_lab2/{comparing}.csv')   # TODO change
+def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear', folder_add=''):
+    for comparing in ['coverage', 'distance']:
+        df = pd.read_csv(f'results{folder_add}/{comparing}.csv')   # TODO change
         df = df[df['method'] != 'studentized']              # TODO delete
         for statistic in ['mean', 'median', 'std', 'percentile_5', 'percentile_95', 'corr']:
             if B_as_method:
@@ -174,12 +178,13 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                         continue
                     title = f'{comparing}s for {statistic} using B = {B}'
                     compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
-                                         col='dgp', title=title, save_add=f'{statistic}_{B}{additional}', scale=scale)
+                                         col='dgp', title=title, save_add=f'{statistic}_{B}{additional}', scale=scale,
+                                         folder_add=folder_add)
 
 
 def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=None, save_add=None, scale='linear',
-                            ci=95):
-    df = pd.read_csv(f'results_lab/{comparing}.csv')
+                            ci=95, folder_add='', subfolder=''):
+    df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
 
     if filter_by is not None:
         for key in filter_by.keys():
@@ -212,20 +217,23 @@ def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=Non
         g.fig.suptitle(title, fontsize=16)
 
     if save_add is not None:
-        plt.savefig(f'images/comparison/only_bts/{comparing}_{save_add}.png')
+        plt.savefig(f'images{folder_add}/comparison/{subfolder}/{comparing}_{save_add}.png')
         plt.close()
     else:
         plt.show()
 
 
 if __name__ == '__main__':
-    cov = pd.read_csv('results_lab/coverage.csv')  # TODO change from lab and include studentized
+    folder_add = '_hierarchical'
+    # subfolder='only_bts'
+    cov = pd.read_csv(f'results{folder_add}/coverage.csv')  # TODO change from lab and include studentized
     cov = cov[cov['method'] != 'studentized']
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    # main_plot_comparison(filter_by={'method': bts_methods}, additional='_only_bts_logit', scale='linear')
+    main_plot_comparison(filter_by={}, additional='hierarchical', scale='linear', folder_add=folder_add)
 
-    plot_times_lengths_grid('length', scale='linear')
+    plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add='hierarchical')
+    plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add='hierarchical')
 
 
 

@@ -454,9 +454,14 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
                    append=True, nr_processes=24, dont_repeat=False, sampling='nonparametric'):
 
     names = ['coverage', 'length', 'times', 'distance', 'intervals']
-    all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
-                   'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
-                   'ci_corr_spearman']
+    if sampling == 'nonparametric':
+        all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
+                       'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
+                       'ci_corr_spearman']
+    else:
+        # TODO spremeni ko veš prave metode, ki se bodo uporabljale -> generiraj glede na level?
+        all_methods = ['cases_01_percentile', 'cases_01_bc', 'cases_10_percentile', 'cases_10_bc',
+                       'cases_11_percentile', 'cases_11_bc', 'random-effect_percentile', 'random-effect_bc']
     cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
             'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
             'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
@@ -466,6 +471,7 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
     folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results'
 
     if not append:
+        # need to use this (append=False) for running first time to set header!!
         for name in names:
             pd.DataFrame(columns=cols[name]).to_csv(f'{folder}/' + name + '.csv', index=False)
 
@@ -572,6 +578,6 @@ if __name__ == '__main__':
     Bs = [10, 100]#, 1000]
     repetitions = 10
     run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=False,
-                   sampling='hierarchical')
+                   sampling='hierarchical', append=False)
 
 
