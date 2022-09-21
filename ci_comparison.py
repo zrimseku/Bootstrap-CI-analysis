@@ -21,6 +21,13 @@ from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGP
     DGPRandEff
 from R_functions import psignrank_range
 
+# TODO set correct R folder
+os.environ['R_HOME'] = "C:/Users/ursau/AppData/Local/Programs/Anaconda/envs/bootstrap/lib/R"
+import rpy2
+import rpy2.robjects as robjects
+import rpy2.robjects.numpy2ri
+rpy2.robjects.numpy2ri.activate()
+
 
 class CompareIntervals:
 
@@ -112,7 +119,7 @@ class CompareIntervals:
         :param data: array containing one sample
         """
         ci = defaultdict(list)
-        new_methods = {'mean': ['ttest', 'wilcoxon'],
+        new_methods = {'mean': ['ttest', 'wilcoxon', 'wilcoxonR'],
                        'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'corr': ['ci_corr_pearson', 'ci_corr_spearman']}
@@ -138,6 +145,26 @@ class CompareIntervals:
                 from_start = [sum(conf < a) for a in self.alphas]
                 # nan if requested coverage is not achievable
                 ci[method] = [w_sums[f] if f < self.n else np.nan for f in from_start]
+                self.times[method].append(time.time() - t)
+
+            elif method == 'wilcoxonR':
+                t = time.time()
+                for a in self.alphas:
+                    f = robjects.r('''f <- function(data, a) {
+                                        res <- wilcox.test(data, conf.int = T, conf.level = a)
+                                        b <- lapply(res, attributes)$conf.int$conf.level[1]
+                                        list(ci=res$conf.int[2], cl=b)
+                                        }
+                                   ''')
+                    r_f = robjects.globalenv['f']
+                    ci_r, achieved_a = r_f(data, a)
+
+                    # res = robjects.r(f"wilcox.test(c{tuple(data)}, alternative='less', conf.int=T, conf.level={a})")
+                    # achieved_a = robjects.r('lapply(res, attributes)$conf.int$conf.level')
+                    if achieved_a[0] != a:
+                        # TODO get correct criteria, decide what to do
+                        print('različno')
+                    ci[method].append(ci_r[0])
                 self.times[method].append(time.time() - t)
 
             elif method in ['ci_quant_param', 'ci_quant_nonparam']:
@@ -198,7 +225,7 @@ class CompareIntervals:
                 for i in range(len(self.alphas)):
                     self.computed_intervals[m][self.alphas[i]].append(ci[m][i])
 
-    def exact_interval_simulation(self, repetitions: int, ):
+    def exact_interval_simulation(self, repetitions: int):
         true_val = self.dgp.get_true_value(self.statistic.__name__)
 
         if np.size(true_val) == 1:
@@ -235,8 +262,8 @@ class CompareIntervals:
         # calculation with different bootstrap methods
         for r in range(repetitions):
             # calculation with non-bootstrap methods
-            # TODO include again after fixing DGP
-            # self.compute_non_bootstrap_intervals(data[r])
+            # TODO include again after fixing DGP (hierarchica)
+            self.compute_non_bootstrap_intervals(data[r])
             # calculation with different bootstrap methods
             if r == 10000:
                 slow_methods = [m for m in self.methods if m in ['double', 'studentized']]
@@ -468,7 +495,7 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
             'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
             'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n', 'B', 'repetitions']}
 
-    folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results'
+    folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results_test'   # TODO change
 
     if not append:
         # need to use this (append=False) for running first time to set header!!
@@ -577,7 +604,22 @@ if __name__ == '__main__':
     ns = [4, 8, 16, 32, 64, 128, 256]
     Bs = [10, 100]#, 1000]
     repetitions = 10
+    # run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=False,
+    #                sampling='hierarchical', append=False)
+
+    # test wilcoxonR
+    methods = ['percentile', 'bc', 'wilcoxon', 'wilcoxonR']
+
+    # dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5),
+    #         DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
+    #         DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
+    # statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
+
+    dgps = [DGPNorm(seed, 0, 1)]
+    statistics = [np.mean]
+
+    ns = [4, 8, 16, 32, 64, 128, 256]
+    Bs = [10, 100]  # , 1000]
+    repetitions = 10
     run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=False,
-                   sampling='hierarchical', append=False)
-
-
+                   append=False)
