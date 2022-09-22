@@ -137,18 +137,6 @@ class CompareIntervals:
 
             elif method == 'wilcoxon':
                 t = time.time()
-                m = int(self.n * (self.n + 1) / 2)
-                k = int(m/2)                             # looking only at half points for faster calculation
-                conf_half = psignrank_range(k, self.n)
-                conf = np.concatenate([conf_half, (1 - conf_half)[::-1]])
-                w_sums = sorted([(data[i] + data[j]) / 2 for i in range(self.n) for j in range(i, self.n)])
-                from_start = [sum(conf < a) for a in self.alphas]
-                # nan if requested coverage is not achievable
-                ci[method] = [w_sums[f] if f < self.n else np.nan for f in from_start]
-                self.times[method].append(time.time() - t)
-
-            elif method == 'wilcoxonR':
-                t = time.time()
                 for a in self.alphas:
                     f = robjects.r('''f <- function(data, a) {
                                         res <- wilcox.test(data, conf.int = T, conf.level = a)
@@ -159,8 +147,6 @@ class CompareIntervals:
                     r_f = robjects.globalenv['f']
                     ci_r, achieved_a = r_f(data, a)
 
-                    # res = robjects.r(f"wilcox.test(c{tuple(data)}, alternative='less', conf.int=T, conf.level={a})")
-                    # achieved_a = robjects.r('lapply(res, attributes)$conf.int$conf.level')
                     if achieved_a[0] != a:
                         # TODO get correct criteria, decide what to do
                         print('različno')
