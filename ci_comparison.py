@@ -1,3 +1,4 @@
+import itertools
 import os
 import time
 from itertools import repeat
@@ -16,16 +17,26 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from ci_methods import Bootstrap
-from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPBernoulli, DGPCategorical
+from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPBernoulli, DGPCategorical, \
+    DGPRandEff
 from R_functions import psignrank_range
+
+# TODO set correct R folder
+os.environ['R_HOME'] = "C:/Users/ursau/AppData/Local/Programs/Anaconda/envs/bootstrap/lib/R"
+import rpy2
+import rpy2.robjects as robjects
+import rpy2.robjects.numpy2ri
+rpy2.robjects.numpy2ri.activate()
 
 
 class CompareIntervals:
 
     def __init__(self, statistic: callable, methods: list[str], data_generator: DGP, n: int, b: int,
-                 alphas: list[float], quantile_type='median_unbiased', use_jit: bool = True):
+                 alphas: list[float], quantile_type='median_unbiased', use_jit: bool = True,
+                 sampling: str = 'nonparametric', sampling_args_to_compare=None):
         self.statistic = statistic
         self.methods = methods
+        self.methods_hierarchical = []
         self.dgp = data_generator
         self.n = n
         self.b = b
@@ -38,6 +49,10 @@ class CompareIntervals:
         self.distances_from_exact = {}
         self.lengths = {}
         self.use_jit = use_jit
+        self.sampling = sampling
+        self.sampling_args = sampling_args_to_compare
+        max_groups_l1 = np.random.randint(2, min(5, int(self.n / 2) + 1))  # TODO smarter selection, 3 levels
+        self.max_group_sizes = [max_groups_l1, 2 * self.n / max_groups_l1]
 
     def compute_bootstrap_intervals(self, data: np.array):
         # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
@@ -48,6 +63,7 @@ class CompareIntervals:
         ts = time.time() - t            # time needed for sampling (will add it to all methods)
         for method in self.methods:
             if method not in bts.implemented_methods:
+                # skip non-bootstrap methods during calculation of bootstrap CI
                 continue
             t = time.time()
             cis = bts.ci(coverages=self.alphas, side='one', method=method, quantile_type=self.quantile_type)
@@ -57,13 +73,53 @@ class CompareIntervals:
             # print('finished', method)
         return bts
 
+    def compute_bootstrap_intervals_hierarchical(self, data: np.array, group_indices: list):
+        btss = []
+        for sampling_method in ['cases', 'random-effect']:
+            for strategy in itertools.product([0, 1], repeat=len(self.dgp.stds)):
+                strategy_bool = [bool(i) for i in strategy]
+                strategy_str = '_' + ''.join([str(s) for s in strategy]) if sampling_method == 'cases' else ''
+                if any(strategy):
+                    if sampling_method == 'random-effect':
+                        # only run random-effect bootstrap once
+                        continue
+                else:
+                    if sampling_method == 'cases':
+                        # skip if we sample without replacement on all levels, as this would just be original set
+                        continue
+                t = time.time()
+                bts = Bootstrap(data, self.statistic, self.use_jit, group_indices=group_indices)
+                bts.sample(self.b, sampling='hierarchical',
+                           sampling_args={'method': sampling_method, 'strategy': strategy_bool})
+                bts.evaluate_statistic(sampling='hierarchical',  sampling_args={'method': sampling_method,
+                                                                                'strategy': strategy_bool})
+                ts = time.time() - t            # time needed for sampling (will add it to all methods)
+                for method in self.methods:
+                    if method not in bts.implemented_methods:
+                        # skip non-bootstrap methods during calculation of bootstrap CI
+                        continue
+                    method_str = sampling_method + strategy_str + '_' + method
+                    if method_str not in self.methods_hierarchical:
+                        self.methods_hierarchical.append(method_str)
+                    t = time.time()
+                    cis = bts.ci(coverages=self.alphas, side='one', method=method, quantile_type=self.quantile_type,
+                                 sampling='hierarchical')
+                    if method_str not in self.computed_intervals:
+                        self.computed_intervals[method_str] = defaultdict(list)
+                    for a, ci in zip(self.alphas, cis):
+                        self.computed_intervals[method_str][a].append(ci)
+                    self.times[method_str].append(time.time() - t + ts)
+                    # print('finished', method_str)
+                btss.append(bts)
+        return btss
+
     def compute_non_bootstrap_intervals(self, data: np.array):
         """
         Computes CI with non-bootstrap methods, that can be applied to the statistic in use.
         :param data: array containing one sample
         """
         ci = defaultdict(list)
-        new_methods = {'mean': ['ttest', 'wilcoxon'],
+        new_methods = {'mean': ['ttest', 'wilcoxon', 'wilcoxonR'],
                        'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'corr': ['ci_corr_pearson', 'ci_corr_spearman']}
@@ -89,6 +145,26 @@ class CompareIntervals:
                 from_start = [sum(conf < a) for a in self.alphas]
                 # nan if requested coverage is not achievable
                 ci[method] = [w_sums[f] if f < self.n else np.nan for f in from_start]
+                self.times[method].append(time.time() - t)
+
+            elif method == 'wilcoxonR':
+                t = time.time()
+                for a in self.alphas:
+                    f = robjects.r('''f <- function(data, a) {
+                                        res <- wilcox.test(data, conf.int = T, conf.level = a)
+                                        b <- lapply(res, attributes)$conf.int$conf.level[1]
+                                        list(ci=res$conf.int[2], cl=b)
+                                        }
+                                   ''')
+                    r_f = robjects.globalenv['f']
+                    ci_r, achieved_a = r_f(data, a)
+
+                    # res = robjects.r(f"wilcox.test(c{tuple(data)}, alternative='less', conf.int=T, conf.level={a})")
+                    # achieved_a = robjects.r('lapply(res, attributes)$conf.int$conf.level')
+                    if achieved_a[0] != a:
+                        # TODO get correct criteria, decide what to do
+                        print('različno')
+                    ci[method].append(ci_r[0])
                 self.times[method].append(time.time() - t)
 
             elif method in ['ci_quant_param', 'ci_quant_nonparam']:
@@ -157,7 +233,11 @@ class CompareIntervals:
         else:
             stat_values = np.empty((repetitions, np.size(true_val)))
 
-        data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
+        if self.sampling == 'hierarchical':
+            data = self.dgp.sample(max_group_sizes=self.max_group_sizes, nr_samples=repetitions)
+        else:
+            data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
+
         for r in range(repetitions):
             stat_values[r] = self.statistic(data[r])
 
@@ -171,12 +251,18 @@ class CompareIntervals:
         self.exact_interval_simulation(100000)
 
         stat_original = []
-        data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
+
+        if self.sampling == 'hierarchical':
+            data = self.dgp.sample(max_group_sizes=self.max_group_sizes, nr_samples=repetitions)
+            group_indices = self.dgp.group_indices
+        else:
+            data = self.dgp.sample(sample_size=self.n, nr_samples=repetitions)
 
         slow_methods = []                   # hack for speeding up in double or studentized method
         # calculation with different bootstrap methods
         for r in range(repetitions):
             # calculation with non-bootstrap methods
+            # TODO include again after fixing DGP (hierarchica)
             self.compute_non_bootstrap_intervals(data[r])
             # calculation with different bootstrap methods
             if r == 10000:
@@ -184,21 +270,27 @@ class CompareIntervals:
                 print(f"Leaving out methods {slow_methods} during repetitions over 10000.")
                 self.methods = [m for m in self.methods if m not in ['double', 'studentized']]
 
-            bts = self.compute_bootstrap_intervals(data[r])
-            stat_original.append(bts.original_statistic_value)
+            if self.sampling == 'hierarchical':
+                btss = self.compute_bootstrap_intervals_hierarchical(data[r], group_indices)
+                stat_original.append(btss[0].original_statistic_value)      # original doesn't depend on sampling
+            else:
+                bts = self.compute_bootstrap_intervals(data[r])
+                stat_original.append(bts.original_statistic_value)
         stat_original = np.array(stat_original)
         self.methods = self.methods + slow_methods
 
         # exact intervals
         self.computed_intervals['exact'] = {a: stat_original - self.inverse_cdf[a] for a in self.alphas}
 
+        # compute coverages for all methods and alphas
+        methods_to_compare = self.methods_hierarchical if self.sampling == 'hierarchical' else self.methods
         self.coverages = {method: {alpha: np.mean(np.array(self.computed_intervals[method][alpha][-repetitions:]) >
                                                   true_statistic_value) for alpha in self.alphas}
-                          for method in self.methods}
+                          for method in methods_to_compare}
 
         self.distances_from_exact = {method: {alpha: np.array(self.computed_intervals[method][alpha][-repetitions:]) -
                                                      self.computed_intervals['exact'][alpha] for alpha in self.alphas}
-                                     for method in self.methods}
+                                     for method in methods_to_compare}
 
         if length is not None:
             low_alpha, high_alpha = [round((1 - length) / 2, 5), round((length + 1) / 2, 5)]
@@ -212,14 +304,15 @@ class CompareIntervals:
 
         self.lengths = {method: np.array(self.computed_intervals[method][high_alpha][-repetitions:]) -
                                 np.array(self.computed_intervals[method][low_alpha][-repetitions:])
-                        for method in self.methods}
+                        for method in methods_to_compare}
 
         times_stats = {method: {'mean': np.mean(self.times[method]), 'std': np.std(self.times[method])}
-                       for method in self.methods}
+                       for method in methods_to_compare}
 
         return self.coverages, times_stats
 
     def draw_intervals(self, alphas_to_draw: list[float], show=False):
+        # only implemented for nonparametric sampling, I think we don't need it for hierarchical
         data = self.dgp.sample(sample_size=self.n)
         self.alphas = np.union1d(self.alphas, alphas_to_draw)
 
@@ -272,15 +365,18 @@ class CompareIntervals:
     def plot_results(self, repetitions, length=0.9, show=False):
         res = self.compare_intervals(repetitions, length)
 
+        folder = 'images_hierarchical' if self.sampling == 'hierarchical' else 'images'
+
         title = f'{self.statistic.__name__} of {type(self.dgp).__name__} (n = {self.n}, B = {self.b})'
 
         # building long dataframes for seaborn use
-        cov_methods = list(self.methods)*len(self.alphas)
-        cov_alphas = np.repeat(self.alphas, len(self.methods))
+        methods_to_use = self.methods_hierarchical if self.sampling == 'hierarchical' else self.methods
+        cov_methods = list(methods_to_use)*len(self.alphas)
+        cov_alphas = np.repeat(self.alphas, len(methods_to_use))
         coverage_df = pd.DataFrame({'method': cov_methods, 'alpha': cov_alphas,
                                     'coverage': [self.coverages[m][a] for m, a in zip(cov_methods, cov_alphas)]})
 
-        sns.barplot(x="alpha", hue="method", y="coverage", data=coverage_df, hue_order=self.methods)
+        sns.barplot(x="alpha", hue="method", y="coverage", data=coverage_df, hue_order=methods_to_use)
 
         plt.axhline(y=self.alphas[0], xmin=0, xmax=1 / len(self.alphas), linestyle='--', color='gray', label='expected')
         for i in range(1, len(self.alphas)):
@@ -292,7 +388,7 @@ class CompareIntervals:
         if show:
             plt.show()
         else:
-            plt.savefig(f'images/coverages_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
+            plt.savefig(f'{folder}/coverages_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
             plt.close()
 
         df_distance = pd.DataFrame({'method': np.repeat(cov_methods, repetitions),
@@ -305,7 +401,8 @@ class CompareIntervals:
         # if np.inf in df_distance.values:      TODO inf vals in 0.975 for ci_quant_nonparam, change this??
         #     print()
 
-        sns.boxplot(x="alpha", hue="method", y="distance", data=df_distance, hue_order=self.methods)
+        sns.boxplot(x="alpha", hue="method", y="distance", data=df_distance, hue_order=methods_to_use)
+        plt.axhline(y=0, linestyle='--', color='gray')
 
         plt.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         plt.title('Distance from exact intervals for' + title)
@@ -313,32 +410,32 @@ class CompareIntervals:
         if show:
             plt.show()
         else:
-            plt.savefig(f'images/distance_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
+            plt.savefig(f'{folder}/distance_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
             plt.close()
 
         df_length = pd.DataFrame({m: v[-repetitions:] for m, v in zip(self.lengths.keys(), self.lengths.values())})
         df_times = pd.DataFrame({m: v[-repetitions:] for m, v in zip(self.times.keys(), self.times.values())})
 
-        ax = sns.boxplot(data=df_length, order=self.methods)
+        ax = sns.boxplot(data=df_length, order=methods_to_use)
         ax.set_xticklabels(ax.get_xticklabels(), rotation=30)
         plt.title(f'Lengths of {length} CI for ' + title)
         plt.tight_layout()
         if show:
             plt.show()
         else:
-            plt.savefig(f'images/length{int(length*100)}_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_'
+            plt.savefig(f'{folder}/length{int(length*100)}_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_'
                         f'B{self.b}.png')
             plt.close()
 
         # times are for all alphas combined TODO: divide them?
-        ax = sns.boxplot(data=df_times, order=self.methods)
+        ax = sns.boxplot(data=df_times, order=methods_to_use)
         ax.set_xticklabels(ax.get_xticklabels(), rotation=30)
         plt.title('Calculation times for ' + title)
         plt.tight_layout()
         if show:
             plt.show()
         else:
-            plt.savefig(f'images/times_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
+            plt.savefig(f'{folder}/times_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
             plt.close()
 
         true_val = self.dgp.get_true_value(self.statistic.__name__)
@@ -381,24 +478,32 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
 
 
 def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alphas_to_draw=[0.05, 0.95], length=0.9,
-                   append=True, nr_processes=24, dont_repeat=False):
+                   append=True, nr_processes=24, dont_repeat=False, sampling='nonparametric'):
 
     names = ['coverage', 'length', 'times', 'distance', 'intervals']
-    all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
-                   'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
-                   'ci_corr_spearman']
+    if sampling == 'nonparametric':
+        all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
+                       'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
+                       'ci_corr_spearman']
+    else:
+        # TODO spremeni ko veš prave metode, ki se bodo uporabljale -> generiraj glede na level?
+        all_methods = ['cases_01_percentile', 'cases_01_bc', 'cases_10_percentile', 'cases_10_bc',
+                       'cases_11_percentile', 'cases_11_bc', 'random-effect_percentile', 'random-effect_bc']
     cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
             'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
             'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
             'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
             'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n', 'B', 'repetitions']}
 
+    folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results_test'   # TODO change
+
     if not append:
+        # need to use this (append=False) for running first time to set header!!
         for name in names:
-            pd.DataFrame(columns=cols[name]).to_csv('results/' + name + '.csv', index=False)
+            pd.DataFrame(columns=cols[name]).to_csv(f'{folder}/' + name + '.csv', index=False)
 
     if dont_repeat:
-        cov = pd.read_csv('results/coverage.csv')
+        cov = pd.read_csv(f'{folder}/coverage.csv')
 
     params = []
     nr_skipped = 0
@@ -432,23 +537,26 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
 
     pool = Pool(processes=nr_processes)
     for dfs in tqdm(pool.imap_unordered(multiprocess_run_function, zip(params, repeat(repetitions), repeat(length),
-                                                                       repeat(alphas_to_draw)), chunksize=1),
-                    total=len(params)):
+                                                                       repeat(alphas_to_draw), repeat(sampling)),
+                                        chunksize=1), total=len(params)):
         for i in range(len(dfs)):
 
             dfs[i] = pd.concat([pd.DataFrame(columns=cols[names[i]]), dfs[i]])      # setting right order of columns
-            dfs[i].to_csv(f'results/{names[i]}.csv', header=False, mode='a', index=False)
+
+            dfs[i].to_csv(f'{folder}/{names[i]}.csv', header=False, mode='a', index=False)
 
 
 def multiprocess_run_function(param_tuple):
-    pars, repetitions, length, alphas_to_draw = param_tuple
+    pars, repetitions, length, alphas_to_draw, sampling = param_tuple
     statistic, methods, dgp, n, B, alphas = pars
     use_jit = (repetitions >= 100)
-    comparison = CompareIntervals(*pars, use_jit=use_jit)
+    comparison = CompareIntervals(*pars, use_jit=use_jit, sampling=sampling)
     _, coverage_df, df_length, df_times, df_distance, df_intervals = comparison.plot_results(repetitions=repetitions,
                                                                                              length=length)
     dfs = [coverage_df, df_length, df_times, df_distance, df_intervals]
-    if dgp.describe()[:9] != 'DGPBiNorm':
+
+    # if dgp.describe()[:9] != 'DGPBiNorm':
+    if sampling != 'hierarchical':
         comparison.draw_intervals(alphas_to_draw)
     df_length['CI'] = length
     for i in range(len(dfs)):
@@ -484,7 +592,7 @@ if __name__ == '__main__':
     # alpha = 0.9
     seed = 0
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
-    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
+    methods = ['percentile', 'bc']
 
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBeta(seed, 10, 2), DGPBernoulli(seed, 0.5),
             DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
@@ -497,5 +605,4 @@ if __name__ == '__main__':
     repetitions = 1000
     run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=24, dont_repeat=True,
                    append=True)
-
 

@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import scipy.stats
 from tqdm import tqdm
@@ -183,6 +185,103 @@ class DGPBiNorm(DGP):
         return np.random.multivariate_normal(self.mean, self.cov, size=size)
 
     def describe(self):
-        return type(self).__name__ + '_'.join([str(par) for par in [self.mean[0], self.mean[1], self.cov[0, 0],
-                                                                    self.cov[0, 1], self.cov[1, 1]]])
+        return type(self).__name__ + '-' + '_'.join([str(par) for par in [self.mean[0], self.mean[1], self.cov[0, 0],
+                                                                          self.cov[0, 1], self.cov[1, 1]]])
+
+
+class DGPRandEff(DGP):
+
+    def __init__(self, seed: 0, mean: float, stds: list, true_statistics: dict = {}):
+        super(DGPRandEff, self).__init__(seed, true_statistics)
+        self.group_indices = []
+        self.mean = mean
+        self.stds = stds
+        self.true_statistics['mean'] = mean
+        self.true_statistics['median'] = mean
+        self.true_statistics['std'] = stds  # TODO this depends on strategy, what to do? also other statistics
+        self.group_sizes = None
+
+    def sample(self, group_sizes: list = None, nr_samples: int = 1, max_group_sizes: list = None) -> np.array:
+        # TODO if nr_samples != 1, all samples have the same group_sizes -> OK? pomoje ne
+        # TODO 2: drugačno samplanje da vemo groud truth skupin??
+        # a bi pustil not vsen sample_size, pa generira sam velikosti?
+        if group_sizes is None:
+            # we will generate groups on random, based on specified max sizes on each level
+            if len(self.stds) != len(max_group_sizes):
+                raise ValueError(f'Specified standard deviations of the generator imply different number of levels '
+                                 f'({len(self.stds) - 1}) than max_group_sizes ({len(max_group_sizes) - 1})!')
+            else:
+                def get_sizes(max_sizes):
+                    if len(max_sizes) == 1:
+                        return np.random.randint(1, max_sizes[0])
+                    else:
+                        return [get_sizes(max_sizes[1:]) for _ in range(np.random.randint(1, max_sizes[0]))]
+                group_sizes = get_sizes(max_group_sizes)
+                # print(group_sizes)
+
+        else:
+            # only checking if depths match
+            depth = 1
+            depth_test = group_sizes.copy()
+            while isinstance(depth_test, list):
+                depth += 1
+                depth_test = depth_test[0]
+            if len(self.stds) != depth:
+                raise ValueError(f'Specified standard deviations of the generator imply different number of levels '
+                                 f'({len(self.stds)}) than group_sizes ({depth})!')
+
+        self.group_sizes = group_sizes
+
+        counter = itertools.count()
+
+        def get_indices(sizes, cnt):
+            if isinstance(sizes, int):
+                return [next(cnt) for _ in range(sizes)]
+            else:
+                return [get_indices(sizes[j], cnt) if isinstance(sizes[j], int) else
+                        get_indices(sizes[j], cnt) for j in range(len(sizes))]
+
+        self.group_indices = get_indices(group_sizes, counter)
+
+        sample_size = next(counter)
+        size = (nr_samples, sample_size)
+        data = np.zeros(size) + self.mean
+
+        def add_error(indices, data, depth, err):
+            if isinstance(indices, int):
+                data[:, indices] += err
+            else:
+                for i in range(len(indices)):
+                    # self.stds can be lists on each level if we want to set each groups std differently
+                    if self.stds[depth] is None:
+                        s = np.random.uniform(0, 1, size=nr_samples)
+                        # print(depth, s)
+                    elif isinstance(self.stds[depth], int) or isinstance(self.stds[depth], float):
+                        s = self.stds[depth]
+                    else:
+                        if len(self.stds[depth]) != len(indices):
+                            raise ValueError(
+                                f'If you set each groups std separately, the length of specified stds on this '
+                                f'level ({len(self.stds[depth])}) should coincide with the number of groups '
+                                f'of the level ({len(indices)}).')
+                        s = self.stds[depth][i]
+                    add_error(indices[i], data, depth + 1, err + np.random.normal(0, s, size=nr_samples))
+
+        add_error(self.group_indices, data, 0, 0)
+
+        if nr_samples == 1:
+            return data[0]      # remove unnecessary parenthesis
+        else:
+            return data
+
+    def describe(self):
+        return type(self).__name__ + '_' + str(self.mean) + '_' + str(len(self.stds)) + 'lvl'
+        # TODO add info about group sizes?
+
+
+if __name__ == '__main__':
+    dgp = DGPRandEff(1, 0, [100, None, 1, 0.1])
+    print(dgp.sample(max_group_sizes=[3, 4, 5, 4], nr_samples=3))
+    print(dgp.describe())
+
 
