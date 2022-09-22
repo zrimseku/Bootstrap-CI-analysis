@@ -319,7 +319,7 @@ class CompareIntervals:
         colors = iter(plt.cm.jet(np.linspace(0.05, 0.95, len(self.methods))))
         plt.hist(bts.statistic_values, bins=30, label='statistic')
         if 'smoothed' in self.methods:
-            if np.nan in bts.statistic_values_noise:
+            if np.nan in bts.statistic_values_noise or np.inf in bts.statistic_values_noise:
                 print('skipped drawing of smoothed values because of nan values.')      # TODO why are they here?
             else:
                 plt.hist(bts.statistic_values_noise, bins=30, label='smoothed stat.', alpha=0.3)
@@ -456,7 +456,7 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
             print(f'Scipy: {[ci_sci.low, ci_sci.high]}')
 
         our = Bootstrap(data, statistic)
-        our_ci = our.ci(coverage=alpha, nr_bootstrap_samples=B, method=method)  # , seed=0)
+        our_ci = our.ci(coverages=[alpha], nr_bootstrap_samples=B, method=method)  # , seed=0)
         # our.plot_bootstrap_distribution()
         print(f'Our: {our_ci}')
 
@@ -540,6 +540,8 @@ def multiprocess_run_function(param_tuple):
     _, coverage_df, df_length, df_times, df_distance, df_intervals = comparison.plot_results(repetitions=repetitions,
                                                                                              length=length)
     dfs = [coverage_df, df_length, df_times, df_distance, df_intervals]
+
+    # if dgp.describe()[:9] != 'DGPBiNorm':
     if sampling != 'hierarchical':
         comparison.draw_intervals(alphas_to_draw)
     df_length['CI'] = length
@@ -578,34 +580,15 @@ if __name__ == '__main__':
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
     methods = ['percentile', 'bc']
 
-
-    # dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5),
-    #         DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
-    #         DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
-    # statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
-
-    dgps = [DGPRandEff(seed, 0, stds=[1, 1])]
-    statistics = [np.mean]
+    dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBeta(seed, 10, 2), DGPBernoulli(seed, 0.5),
+            DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
+            DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
+    # dgps = [DGPNorm(seed, 0, 1)]
+    statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
 
     ns = [4, 8, 16, 32, 64, 128, 256]
-    Bs = [10, 100]#, 1000]
-    repetitions = 10
-    # run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=False,
-    #                sampling='hierarchical', append=False)
+    Bs = [10, 100, 1000]
+    repetitions = 1000
+    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=24, dont_repeat=True,
+                   append=True)
 
-    # test wilcoxonR
-    methods = ['percentile', 'bc', 'wilcoxon', 'wilcoxonR']
-
-    # dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBernoulli(seed, 0.5),
-    #         DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
-    #         DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
-    # statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
-
-    dgps = [DGPNorm(seed, 0, 1)]
-    statistics = [np.mean]
-
-    ns = [4, 8, 16, 32, 64, 128, 256]
-    Bs = [10, 100]  # , 1000]
-    repetitions = 10
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=False,
-                   append=False)
