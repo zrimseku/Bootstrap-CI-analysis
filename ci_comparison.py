@@ -147,7 +147,7 @@ class CompareIntervals:
                     r_f = robjects.globalenv['f']
                     ci_r, achieved_a = r_f(data, a)
 
-                    if abs(achieved_a[0] - a) > a/2:
+                    if abs(achieved_a[0] - a) > a/2:        # R criteria for saying that conf level is not achievable
                         # TODO get correct criteria, decide what to do
                         ci_r[0] = np.nan
                     ci[method].append(ci_r[0])
