@@ -22,7 +22,9 @@ from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGP
 from R_functions import psignrank_range
 
 # TODO set correct R folder
-os.environ['R_HOME'] = "C:/Users/ursau/AppData/Local/Programs/Anaconda/envs/bootstrap/lib/R"
+# os.environ['R_HOME'] = "C:/Users/ursau/AppData/Local/Programs/Anaconda/envs/bootstrap/lib/R"        # doma
+os.environ['R_HOME'] = "C:/Anaconda3/envs/bootstrapci/lib/R"                                        # lab
+
 import rpy2
 import rpy2.robjects as robjects
 import rpy2.robjects.numpy2ri
@@ -119,8 +121,8 @@ class CompareIntervals:
         :param data: array containing one sample
         """
         ci = defaultdict(list)
-        new_methods = {'mean': ['ttest', 'wilcoxon', 'wilcoxonR'],
-                       'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
+        new_methods = {'mean': ['wilcoxon'],   #['ttest', 'wilcoxon'],
+                       'median': ['wilcoxon'],  # 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'corr': ['ci_corr_pearson', 'ci_corr_spearman']}
         if self.statistic.__name__[:10] not in ['mean', 'median', 'std', 'percentile', 'corr']:
@@ -481,7 +483,7 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
             'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
             'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n', 'B', 'repetitions']}
 
-    folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results_test'   # TODO change
+    folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results'
 
     if not append:
         # need to use this (append=False) for running first time to set header!!
@@ -579,16 +581,18 @@ if __name__ == '__main__':
     seed = 0
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
     methods = ['percentile', 'bc']
+    methods = []
 
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBeta(seed, 10, 2), DGPBernoulli(seed, 0.5),
-            DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
-            DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
+            DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1)]
+            # DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
     # dgps = [DGPNorm(seed, 0, 1)]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
+    statistics = [np.mean, np.median]
 
     ns = [4, 8, 16, 32, 64, 128, 256]
     Bs = [10, 100, 1000]
     repetitions = 1000
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=24, dont_repeat=True,
+    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=24, dont_repeat=False,
                    append=True)
 
