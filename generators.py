@@ -137,8 +137,8 @@ class DGPBernoulli(DGP):
         else:
             self.true_statistics['median'] = 1
         self.true_statistics['std'] = (p * (1 - p)) ** 0.5
-        self.true_statistics['percentile_5'] = p >= 0.95
-        self.true_statistics['percentile_95'] = p >= 0.05
+        self.true_statistics['percentile_5'] = float(p >= 0.95)
+        self.true_statistics['percentile_95'] = float(p >= 0.05)
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
         size = (nr_samples, sample_size) if nr_samples != 1 else sample_size
