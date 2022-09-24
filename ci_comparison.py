@@ -141,7 +141,7 @@ class CompareIntervals:
                 t = time.time()
                 for a in self.alphas:
                     f = robjects.r('''f <- function(data, a) {
-                                        res <- wilcox.test(data, conf.int = T, conf.level = a)
+                                        res <- wilcox.test(data, conf.int = T, conf.level = a, alternative='less')
                                         b <- lapply(res, attributes)$conf.int$conf.level[1]
                                         list(ci=res$conf.int[2], cl=b)
                                         }
