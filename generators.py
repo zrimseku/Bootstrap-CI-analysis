@@ -8,8 +8,10 @@ from scipy.stats import norm
 
 class DGP:
 
-    def __init__(self, seed: int, true_statistics: dict = {}):
+    def __init__(self, seed: int, true_statistics: dict = None):
         np.random.seed(seed)
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics = true_statistics
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
@@ -27,10 +29,12 @@ class DGP:
 
 class DGPNorm(DGP):
 
-    def __init__(self, seed: int, loc: float = 0, scale: float = 1, true_statistics: dict = {}):
+    def __init__(self, seed: int, loc: float = 0, scale: float = 1, true_statistics: dict = None):
         super(DGPNorm, self).__init__(seed, true_statistics)
         self.loc = loc
         self.scale = scale
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = loc
         self.true_statistics['median'] = loc
         self.true_statistics['std'] = scale
@@ -47,7 +51,7 @@ class DGPNorm(DGP):
 
 class DGPExp(DGP):
 
-    def __init__(self, seed: int, scale: float = 1, true_statistics: dict = {}):
+    def __init__(self, seed: int, scale: float = 1, true_statistics: dict = None):
         super(DGPExp, self).__init__(seed, true_statistics)
         self.scale = scale                      # 1/lambda
         self.true_statistics['mean'] = scale
@@ -66,10 +70,12 @@ class DGPExp(DGP):
 
 class DGPBeta(DGP):
 
-    def __init__(self, seed: int, alpha: float = 1, beta: float = 1, true_statistics: dict = {}):
+    def __init__(self, seed: int, alpha: float = 1, beta: float = 1, true_statistics: dict = None):
         super(DGPBeta, self).__init__(seed, true_statistics)
         self.alpha = alpha
         self.beta = beta
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = alpha / (alpha + beta)
         self.true_statistics['std'] = np.sqrt(alpha * beta / (alpha + beta) ** 2 / (alpha + beta + 1))
         self.true_statistics['percentile_5'] = scipy.stats.beta.ppf(0.05, alpha, beta)
@@ -86,10 +92,12 @@ class DGPBeta(DGP):
 
 class DGPLogNorm(DGP):
 
-    def __init__(self, seed: int, mean: float, sigma: float, true_statistics: dict = {}):
+    def __init__(self, seed: int, mean: float, sigma: float, true_statistics: dict = None):
         super(DGPLogNorm, self).__init__(seed, true_statistics)
         self.mean = mean
         self.sigma = sigma
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = np.exp(mean + (sigma ** 2) / 2)
         self.true_statistics['median'] = np.exp(mean)
         self.true_statistics['std'] = (np.exp(2 * mean + sigma ** 2) * (np.exp(sigma ** 2) - 1)) ** 0.5
@@ -106,10 +114,12 @@ class DGPLogNorm(DGP):
 
 class DGPLaplace(DGP):
 
-    def __init__(self, seed: int, loc: float, scale: float, true_statistics: dict = {}):
+    def __init__(self, seed: int, loc: float, scale: float, true_statistics: dict = None):
         super(DGPLaplace, self).__init__(seed, true_statistics)
         self.loc = loc
         self.scale = scale
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = loc
         self.true_statistics['median'] = loc
         self.true_statistics['std'] = scale * 2**0.5
@@ -126,9 +136,11 @@ class DGPLaplace(DGP):
 
 class DGPBernoulli(DGP):
 
-    def __init__(self, seed: int, p: float, true_statistics: dict = {}):
+    def __init__(self, seed: int, p: float, true_statistics: dict = None):
         super(DGPBernoulli, self).__init__(seed, true_statistics)
         self.p = p
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = p
         if p == 0.5:
             self.true_statistics['median'] = 0.5
@@ -150,9 +162,11 @@ class DGPBernoulli(DGP):
 
 class DGPCategorical(DGP):
 
-    def __init__(self, seed: int, pvals: np.array, true_statistics: dict = {}):
+    def __init__(self, seed: int, pvals: np.array, true_statistics: dict = None):
         super(DGPCategorical, self).__init__(seed, true_statistics)
         self.pvals = pvals
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = np.sum(pvals * np.array(range(len(pvals))))
         self.true_statistics['median'] = np.where(np.cumsum(pvals) > 0.5)[0][0]
         # self.true_statistics['std'] = (pvals * (1 - pvals)) ** 0.5 ???
@@ -169,10 +183,12 @@ class DGPCategorical(DGP):
 
 class DGPBiNorm(DGP):
 
-    def __init__(self, seed: int, mean: np.array, cov: np.array, true_statistics: dict = {}):
+    def __init__(self, seed: int, mean: np.array, cov: np.array, true_statistics: dict = None):
         super(DGPBiNorm, self).__init__(seed, true_statistics)
         self.mean = mean        # means of both variables, 1D array of length 2
         self.cov = cov          # covariance matrix, 2D array (2x2)
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = mean                         # TODO do we need any of these (for now just corr)
         self.true_statistics['median'] = mean
         self.true_statistics['std'] = np.diag(cov) ** 0.5
@@ -191,11 +207,13 @@ class DGPBiNorm(DGP):
 
 class DGPRandEff(DGP):
 
-    def __init__(self, seed: 0, mean: float, stds: list, true_statistics: dict = {}):
+    def __init__(self, seed: 0, mean: float, stds: list, true_statistics: dict = None):
         super(DGPRandEff, self).__init__(seed, true_statistics)
         self.group_indices = []
         self.mean = mean
         self.stds = stds
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = mean
         self.true_statistics['median'] = mean
         self.true_statistics['std'] = stds  # TODO this depends on strategy, what to do? also other statistics
