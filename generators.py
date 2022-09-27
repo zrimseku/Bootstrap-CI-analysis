@@ -54,6 +54,8 @@ class DGPExp(DGP):
     def __init__(self, seed: int, scale: float = 1, true_statistics: dict = None):
         super(DGPExp, self).__init__(seed, true_statistics)
         self.scale = scale                      # 1/lambda
+        if true_statistics is None:
+            self.true_statistics = {}
         self.true_statistics['mean'] = scale
         self.true_statistics['median'] = scale * np.log(2)
         self.true_statistics['std'] = scale
