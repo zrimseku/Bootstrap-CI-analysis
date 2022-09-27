@@ -90,7 +90,7 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
 
     g = sns.FacetGrid(df, row=row, col=col, margin_titles=True, sharex=True, sharey='row', palette=colors)
     if comparing == 'coverage':
-        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale, set_ylim=set_ylim)
+        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale, set_ylim=set_ylim, order=df[hue].unique())
     else:
         g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=0, whis=[(100-ci)/2, 50 + ci/2],
               palette=colors)
@@ -124,18 +124,18 @@ def plot_coverage_bars(data, **kwargs):
         data['ci'] *= scipy.stats.norm.ppf(0.5 + ci/200)
     data['low'] = data['coverage'] - data['ci']
 
-    n_levels = len(data['method'].unique())
+    n_levels = len(kwargs['order'])
     group_width = 0.8
     bar_width = group_width / n_levels
     offsets = np.linspace(0, group_width - bar_width, n_levels)
     offsets -= offsets.mean()
 
     bar_pos = np.arange(data['n'].nunique())
-    for i, method in enumerate(data['method'].unique()):
+    for i, method in enumerate(kwargs['order']):
         data_m = data[data['method'] == method]
         offset = bar_pos + offsets[i]
-        if data_m['ci'].shape[0] != 7:
-            a = 0
+        # if data_m['ci'].shape[0] != 7:
+        #     a = 0
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['coverage'], ec='k', label=method, color=colors[i])
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['low'], ec='k', color=colors[i])
 
@@ -164,7 +164,7 @@ def plot_coverage_bars(data, **kwargs):
     plt.xticks(bar_pos, sorted(data['n'].unique()))
 
 
-def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear', folder_add=''):
+def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear', folder_add='', set_ylim=True):
     for comparing in ['coverage', 'distance']:
         df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
         # df = df[df['method'] != 'studentized']
@@ -181,7 +181,7 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                     title = f'{comparing}s for {statistic} using B = {B}'
                     compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
                                          col='dgp', title=title, save_add=f'{statistic}_{B}{additional}', scale=scale,
-                                         folder_add=folder_add)
+                                         folder_add=folder_add, set_ylim=set_ylim)
 
 
 def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=None, save_add=None, scale='linear',
