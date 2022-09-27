@@ -134,6 +134,8 @@ def plot_coverage_bars(data, **kwargs):
     for i, method in enumerate(data['method'].unique()):
         data_m = data[data['method'] == method]
         offset = bar_pos + offsets[i]
+        if data_m['ci'].shape[0] != 7:
+            a = 0
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['coverage'], ec='k', label=method, color=colors[i])
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['low'], ec='k', color=colors[i])
 
@@ -164,8 +166,8 @@ def plot_coverage_bars(data, **kwargs):
 
 def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear', folder_add=''):
     for comparing in ['coverage', 'distance']:
-        df = pd.read_csv(f'results{folder_add}/{comparing}.csv')   # TODO change
-        df = df[df['method'] != 'studentized']              # TODO delete
+        df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
+        # df = df[df['method'] != 'studentized']
         for statistic in ['mean', 'median', 'std', 'percentile_5', 'percentile_95', 'corr']:
             if B_as_method:
                 # a povprečit a vzet samo enega od B-jev za ostale metode?
@@ -195,7 +197,7 @@ def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=Non
         id_vars.append('CI')
     df_long = pd.melt(df, id_vars=id_vars).dropna()
 
-    df_long = df_long[df_long['variable'] != 'studentized']        # TODO DELETE
+    # df_long = df_long[df_long['variable'] != 'studentized']        # TODO DELETE
 
     nm = df_long['variable'].nunique()
     if nm > 10:
@@ -224,16 +226,17 @@ def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=Non
 
 
 if __name__ == '__main__':
-    folder_add = '_hierarchical'
+    folder_add = ''
     # subfolder='only_bts'
-    cov = pd.read_csv(f'results{folder_add}/coverage.csv')  # TODO change from lab and include studentized
-    cov = cov[cov['method'] != 'studentized']
+    # additional = 'hierarchical'
+    additional = ''
+    cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison(filter_by={}, additional='hierarchical', scale='linear', folder_add=folder_add)
+    main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add)
 
-    plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add='hierarchical')
-    plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add='hierarchical')
+    plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
+    plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
 
 
 

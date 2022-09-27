@@ -121,8 +121,8 @@ class CompareIntervals:
         :param data: array containing one sample
         """
         ci = defaultdict(list)
-        new_methods = {'mean': ['wilcoxon'],   #['ttest', 'wilcoxon'],
-                       'median': ['wilcoxon'],  # 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
+        new_methods = {'mean': ['wilcoxon', 'ttest'],
+                       'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'corr': ['ci_corr_pearson', 'ci_corr_spearman']}
         if self.statistic.__name__[:10] not in ['mean', 'median', 'std', 'percentile', 'corr']:
@@ -250,7 +250,7 @@ class CompareIntervals:
         # calculation with different bootstrap methods
         for r in range(repetitions):
             # calculation with non-bootstrap methods
-            # TODO include again after fixing DGP (hierarchica)
+            # TODO include again after fixing DGP (hierarchical)
             self.compute_non_bootstrap_intervals(data[r])
             # calculation with different bootstrap methods
             if r == 10000:
@@ -515,6 +515,8 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
                             # TODO: check if we have calculations for all methods and alphas if needed
                             nr_skipped += 1
                             continue
+                        else:
+                            print('Adding: ', dgp.describe(), statistic.__name__, n, B, repetitions)
 
                     methods_par = methods.copy()
 
@@ -543,8 +545,8 @@ def multiprocess_run_function(param_tuple):
                                                                                              length=length)
     dfs = [coverage_df, df_length, df_times, df_distance, df_intervals]
 
-    # if dgp.describe()[:9] != 'DGPBiNorm':
-    if sampling != 'hierarchical':
+    if sampling != 'hierarchical' and dgp.describe()[:9] != 'DGPBiNorm':
+        # 3D histogram not implemented and hierarchical data are not properly shown on histogram
         comparison.draw_intervals(alphas_to_draw)
     df_length['CI'] = length
     for i in range(len(dfs)):
@@ -581,18 +583,18 @@ if __name__ == '__main__':
     seed = 0
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
     methods = ['percentile', 'bc']
-    methods = []
+    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
 
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBeta(seed, 10, 2), DGPBernoulli(seed, 0.5),
-            DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1)]
-            # DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
+            DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
+            DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
     # dgps = [DGPNorm(seed, 0, 1)]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
-    statistics = [np.mean, np.median]
+    # statistics = [np.mean, np.median]
 
     ns = [4, 8, 16, 32, 64, 128, 256]
     Bs = [10, 100, 1000]
     repetitions = 1000
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=24, dont_repeat=False,
+    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=24, dont_repeat=True,
                    append=True)
 
