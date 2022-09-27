@@ -30,10 +30,11 @@ class Bootstrap:
                sampling_args: dict = None):
         """
         Draws bootstrap samples from original dataset.
-        :param nr_bootstrap_samples: TODO
-        :param seed:
-        :param sampling:
-        :param sampling_args:
+        :param nr_bootstrap_samples: how many samples to draw
+        :param seed: random seed
+        :param sampling: select type of sampling: choose between nonparametric or hierarchical
+        :param sampling_args: sampling arguments, used when doing hierarchical sampling. They should include 'method',
+        implemented methods are 'cases' and 'random-effect'. For 'cases' sampling 'strategy' also needs to be defined.
         """
         # TODO: include semi-parametric and parametric sampling
         if seed is not None:
@@ -45,10 +46,10 @@ class Bootstrap:
 
         elif sampling == 'hierarchical':
             method = sampling_args['method']            # cases / random-effect / residuals?
-            strategy = sampling_args['strategy']        # with (True) or without (False) replacement on each level
 
             if method == 'cases':
                 groups_n = [[self.group_indices.copy()] for _ in range(nr_bootstrap_samples)]
+                strategy = sampling_args['strategy']  # with (True) or without (False) replacement on each level
                 for s in strategy:
                     if s:       # with replacement
                         gr_indices_n = [[np.random.randint(len(g), size=len(g)) for g in groups] for groups in groups_n]
@@ -102,7 +103,12 @@ class Bootstrap:
             raise ValueError(f'{sampling} sampling is not implemented. Choose between nonparametric and hierarchical.')
 
     def evaluate_statistic(self, noise: np.array = None, sampling: str = 'nonparametric', sampling_args: dict = None):
-        """Evaluates statistic on bootstrapped datasets"""
+        """
+        Evaluates statistic on bootstrapped datasets.
+        :param noise: smoothed bootstrap calculates noise separately, so it needs to be included at statistic evaluation
+        :param sampling: type of sampling, that tells which values to use at evaluation
+        :param sampling_args: needed for sampling method of hierarchical sampling
+        """
         if np.size(self.original_statistic_value) == 1:
             self.statistic_values = np.zeros(self.b)
         else:
@@ -110,7 +116,7 @@ class Bootstrap:
 
         if noise is not None:
             # save statistic values with noise separately, so we don't override the original ones when calling smoothed
-            # TODO for random-effect if needed
+            # TODO for random-effect if needed?
             if np.size(self.original_statistic_value) == 1:
                 self.statistic_values_noise = np.zeros(self.b)
             else:
@@ -120,7 +126,7 @@ class Bootstrap:
             statistic_input_noise += noise
 
         for i in range(self.b):
-            # do we want to call statistic in a vectorized way, to avoid the for loop? TODO allow option
+            # do we want to call statistic in a vectorized way, to avoid the for loop? TODO allow option?
             if sampling == 'nonparametric' or sampling_args['method'] == 'cases':
                 self.statistic_values[i] = self.statistic(self.original_sample[self.bootstrap_indices[i]])  # TODO test
             elif sampling == 'hierarchical' and sampling_args['method'] == 'random-effect':
@@ -136,16 +142,17 @@ class Bootstrap:
            seed: int = None, sampling: str = 'nonparametric', quantile_type: str = 'median_unbiased',
            sampling_args: dict = {'kernel': 'norm', 'width': None}) -> np.array:
         """
-        Returns confidence intervals.
-        :param coverages: TODO
-        :param side:
-        :param method:
-        :param nr_bootstrap_samples:
-        :param seed:
-        :param sampling:
-        :param quantile_type:
-        :param sampling_args:
-        :return:
+        Returns confidence intervals, calculated with selected method.
+        :param coverages: array of coverages for which the values need to be computed
+        :param side: it is possible to choose between 'one' and 'two' sided confidence intervals
+        :param method: how to construct confidence intervals. It is possible to select from
+                       'percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double' and 'studentized'
+        :param nr_bootstrap_samples: number of bootstrap samples
+        :param seed: random seed
+        :param sampling: type of sampling, 'nonparametric' or 'hierarchical'
+        :param sampling_args: additional arguments used with hierarchical sampling
+        :param quantile_type: type of quantiles, possible to select from methods used in numpy's quantile function
+        :return: array of values for corresponding coverages
         """
 
         if nr_bootstrap_samples is not None:        # we will sample again, otherwise reuse previously sampled data
@@ -247,11 +254,14 @@ class Bootstrap:
             raise ValueError(f'This method is not supported, choose between {self.implemented_methods}.')
 
     def studentized_error_calculation(self):
+        """
+        Calculation of standard errors of nested bootstrap values for studentized method.
+        :return: standard errors
+        """
         # TODO
         #  a bi blo bols dat to funkcijo ven
         #  a je okej da je nested, kaj so druge opcije? lahko delta method
         #  pomojem bi blo kul nastimat, da uporabnik sam poda, ce noce nested delat...
-        #  paralelizacija
 
         # NESTED BOOTSTRAP:
         nested_btsp_values = self.nested_bootstrap(self.b)
@@ -262,7 +272,12 @@ class Bootstrap:
         return standard_errors
 
     def nested_bootstrap(self, b_inner):
-        # TODO for random-effect if needed
+        """
+        Nested or double bootstrap.
+        :param b_inner: number of inner bootstrap samples
+        :return: array of size self.b x b_inner containing statistic value of inner bootstrap samples
+        """
+        # TODO for hierarchical if needed
         if self.b >= 500 or b_inner >= 500 or self.n > 100 or self.use_jit:
             stat_njit = {'mean': wrapped_mean, 'median': wrapped_median, 'std': wrapped_std,
                  'percentile_5': wrapped_percentile_5, 'percentile_95': wrapped_percentile_95,
@@ -284,6 +299,10 @@ class Bootstrap:
 
     # DIAGNOSTICS - should they be in separate class?
     def jackknife_after_bootstrap(self, bootstrap_statistics=[np.mean]):
+        """
+        Jackknife-after-bootstrap diagnostic to analyse if sampling is too dependent on any single point.
+        :param bootstrap_statistics: which statistic to use
+        """
         # would it help to add exact to jackknife - this wouldn't be possible in real case, maybe we can find something
         # from it + draw different percentiles for different methods, see which are less effected by single points
         jk_indices = {i: [j for j in range(self.b) if i not in self.bootstrap_indices[j, :]]
@@ -320,6 +339,15 @@ class Bootstrap:
 # NUMBA functions, used to significantly speed up nested bootstrap calculation
 @njit()
 def nested_bootstrap_jit(b, b_inner, n, original_sample, statistic):
+    """
+    Nested/double bootstrap but using library njit to speed up the calculations.
+    :param b: number of bootstrap samples
+    :param b_inner: number of inner bootstrap samples
+    :param n: dataset size
+    :param original_sample: original dataset
+    :param statistic: statistic in which we are interested
+    :return: array of size self.b x b_inner containing statistic value of inner bootstrap samples
+    """
     bootstrap_indices = np.random.choice(np.arange(n), size=(b, n))
     new_values = np.zeros((b, b_inner))
     for i in range(b):
@@ -330,6 +358,7 @@ def nested_bootstrap_jit(b, b_inner, n, original_sample, statistic):
     return new_values
 
 
+# Wrapped functions to be able to use them with njit library
 @njit()
 def wrapped_median(val):
     return np.median(val)
