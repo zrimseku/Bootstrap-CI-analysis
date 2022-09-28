@@ -382,13 +382,24 @@ def wrapped_corr(data):
 
 @njit()
 def wrapped_percentile_5(data):
-    # TODO: can't use median unbiased method in numba, implement it if needed
-    return np.quantile(data, 0.05)  # , method='median_unbiased')
+    # return np.quantile(data, 0.05)  # , method='median_unbiased')
+    return quantile_median_unbiased(data, 0.05)
 
 
 @njit()
 def wrapped_percentile_95(data):
-    return np.quantile(data, 0.95)  # , method='median_unbiased')
+    # return np.quantile(data, 0.95)  # , method='median_unbiased')
+    return quantile_median_unbiased(data, 0.95)
+
+
+@njit()
+def quantile_median_unbiased(data, q):
+    n = len(data)
+    m = (q+1)/3         # a = b = 1/3, m = a + p*(1 - a - b)
+    j = int(q*n + m)
+    g = q*n + m - j
+    data = np.sort(data)
+    return (1 - g) * data[j-1] + g * data[j]
 
 
 if __name__ == '__main__':
