@@ -487,6 +487,8 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
 
     if not append:
         # need to use this (append=False) for running first time to set header!!
+        print('Will delete all results - ARE YOU SURE???')
+        time.sleep(60)
         for name in names:
             pd.DataFrame(columns=cols[name]).to_csv(f'{folder}/' + name + '.csv', index=False)
 
@@ -583,7 +585,7 @@ if __name__ == '__main__':
     seed = 0
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
     methods = ['percentile', 'bc']
-    methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
+    # methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
 
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBeta(seed, 10, 2), DGPBernoulli(seed, 0.5),
             DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
@@ -594,7 +596,7 @@ if __name__ == '__main__':
 
     ns = [4, 8, 16, 32, 64, 128, 256]
     Bs = [10, 100, 1000]
-    repetitions = 1000
+    repetitions = 10000
     run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=24, dont_repeat=True,
-                   append=True)
+                   append=False)
 
