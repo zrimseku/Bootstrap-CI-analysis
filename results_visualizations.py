@@ -235,8 +235,8 @@ if __name__ == '__main__':
 
     main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add)
 
-    plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
-    plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
+    # plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
+    # plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
 
 
 
