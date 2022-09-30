@@ -182,6 +182,7 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                     compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
                                          col='dgp', title=title, save_add=f'{statistic}_{B}{additional}', scale=scale,
                                          folder_add=folder_add, set_ylim=set_ylim)
+        del df
 
 
 def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=None, save_add=None, scale='linear',
@@ -235,8 +236,8 @@ if __name__ == '__main__':
 
     main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add)
 
-    plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
-    plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
+    # plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
+    # plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
 
 
 
