@@ -468,9 +468,11 @@ def compare_bootstraps_with_library_implementations(data, statistic, methods, B,
         print('_____________________________________________________________________')
 
 
-def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alphas_to_draw=[0.05, 0.95], length=0.9,
-                   append=True, nr_processes=24, dont_repeat=False, sampling='nonparametric'):
-
+def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, alphas_to_draw=[0.05, 0.95],
+                   leaves=None, branches=None,
+                   length=0.9, append=True, nr_processes=24, dont_repeat=False, sampling='nonparametric'):
+    if ns is None:
+        ns = [1]        # just to hold space in for loop
     names = ['coverage', 'length', 'times', 'distance', 'intervals']
     if sampling == 'nonparametric':
         all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
@@ -483,11 +485,24 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
         ci_methods = ['percentile', 'bca']
         all_methods = [s + '_' + c for s in sampling_methods for c in ci_methods]
 
-    cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
-            'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
-            'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
-            'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
-            'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n', 'B', 'repetitions']}
+    if sampling == 'hierarchical':
+        cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B',
+                             'repetitions', 'balance', 'std'],
+                'length': ['CI', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance',
+                           'std'] + all_methods,
+                'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B',
+                             'repetitions', 'balance', 'std'],
+                'times': ['dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance', 'std'] +
+                         all_methods,
+                'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n_leaves',
+                              'n_branches', 'n', 'B', 'repetitions', 'balance', 'std']}
+    else:
+        cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
+                'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
+                'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
+                'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
+                'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n', 'B',
+                              'repetitions']}
 
     folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results'
 
@@ -513,33 +528,45 @@ def run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, alpha
                 for B in Bs:
 
                     if dont_repeat:
-                        same_pars = cov[(cov['dgp'] == dgp.describe()) & (cov['statistic'] == statistic.__name__) &
-                                        (cov['n'] == n) & (cov['B'] == B) & (cov['repetitions'] == repetitions)]
-                        if same_pars.shape[0] > 0:
-                            # TODO: check if we have calculations for all methods and alphas if needed, group_sizes
-                            nr_skipped += 1
-                            continue
-                        else:
-                            print('Adding: ', dgp.describe(), statistic.__name__, n, B, repetitions)
+                        if sampling == 'nonparametric':
+                            same_pars = cov[(cov['dgp'] == dgp.describe()) & (cov['statistic'] == statistic.__name__) &
+                                            (cov['n'] == n) & (cov['B'] == B) & (cov['repetitions'] == repetitions)]
+
+                            if same_pars.shape[0] > 0:
+                                # TODO: check if we have calculations for all methods and alphas if needed, group_sizes
+                                nr_skipped += 1
+                                continue
+                            else:
+                                print('Adding: ', dgp.describe(), statistic.__name__, n, B, repetitions)
 
                     if sampling == 'hierarchical':
                         n_lvls = len(dgp.stds)
-                        if n_lvls not in [2, 3]:
-                            raise ValueError(f'Choose between 2 and 3 levels! Selected stds imply {n_lvls} levels.')
                         sampling_parameters = {'strategies': list(itertools.product([0, 1], repeat=n_lvls)),
                                                'sampling_methods': ['cases']}
-                        if n_lvls == 2:
-                            group_sizes = [[int(n / 2 ** i) for _ in range(2 ** i)] for i in range(1, n_lvls + 1)]
-                            els = [int(n / 2 ** i) for i in range(1, n_lvls + 1)]
-                        else:  # 3 levels
-                            group_sizes = [[[int(n / 2 ** (i+1)) for _ in range(2 ** i)] for _ in range(2)]
-                                           for i in (range(1, n_lvls - 1) if n < 16 else range(1, n_lvls) if n < 32
-                                            else range(1, n_lvls + 1))]
-                            els = [int(n / 2 ** (i+1)) for i in range(1, n_lvls + 1)]
 
-                        for gs, e in zip(group_sizes, els):
-                            params.append(((statistic, methods.copy(), dgp, n, B, alphas.copy()),
-                                           (gs, sampling_parameters, f'_balanced_{e}')))
+                        for n_leaves in leaves:
+                            for n_branches in branches:
+                                same_pars = cov[
+                                    (cov['dgp'] == dgp.describe()) & (cov['statistic'] == statistic.__name__) &
+                                    (cov['n_leaves'] == n_leaves) & (cov['n_branches'] == n_branches) & (cov['B'] == B)
+                                    & (cov['repetitions'] == repetitions) & (cov['balance'] == 'balanced')
+                                    & (cov['std'] == dgp.stds[0])]
+                                if same_pars.shape[0] > 0:
+                                    nr_skipped += 1
+                                    continue
+                                else:
+                                    print('Adding: ', dgp.describe(), statistic.__name__, n_leaves, n_branches, B,
+                                          repetitions)
+
+                                group_sizes = [n_leaves for _ in range(n_branches)]
+                                n = n_leaves * n_branches
+
+                                for _ in range(n_lvls - 2):
+                                    group_sizes = [group_sizes for _ in range(n_branches)]
+                                    n *= n_branches
+
+                                params.append(((statistic, methods.copy(), dgp, n, B, alphas.copy()),
+                                               (group_sizes, sampling_parameters, n_leaves, n_branches, 'balanced')))
 
                     else:
                         params.append((statistic, methods.copy(), dgp, n, B, alphas.copy()))
@@ -562,11 +589,13 @@ def multiprocess_run_function(param_tuple):
     pars_tup, repetitions, length, alphas_to_draw, sampling = param_tuple
     if sampling == 'hierarchical':
         pars, samp_pars = pars_tup
-        group_sizes, sampling_parameters, additional = samp_pars
+        group_sizes, sampling_parameters, n_leaves, n_branches, balance = samp_pars
     else:
         pars = pars_tup
         group_sizes = sampling_parameters = None
+
     statistic, methods, dgp, n, B, alphas = pars
+
     use_jit = (repetitions >= 100)
     comparison = CompareIntervals(*pars, use_jit=use_jit, sampling=sampling, group_sizes=group_sizes,
                                   sampling_parameters=sampling_parameters)
@@ -579,12 +608,15 @@ def multiprocess_run_function(param_tuple):
         comparison.draw_intervals(alphas_to_draw)
     df_length['CI'] = length
     for i in range(len(dfs)):
-        dgp_name = dgp.describe()
         if sampling == 'hierarchical':
-            dgp_name += additional
-        dfs[i]['dgp'] = dgp_name
-        dfs[i]['statistic'] = statistic.__name__
+            dfs[i]['n_leaves'] = n_leaves
+            dfs[i]['n_branches'] = n_branches
+            dfs[i]['balance'] = balance
+            dfs[i]['std'] = dgp.stds[0]         # TODO change if we'll have different on different levels
+
         dfs[i]['n'] = n
+        dfs[i]['dgp'] = dgp.describe()
+        dfs[i]['statistic'] = statistic.__name__
         dfs[i]['B'] = B
         dfs[i]['repetitions'] = repetitions
 
@@ -620,13 +652,22 @@ if __name__ == '__main__':
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBeta(seed, 10, 2), DGPBernoulli(seed, 0.5),
             DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
-    dgps = [DGPRandEff(seed, 0, [1, 1]), DGPRandEff(seed, 0, [1, 1, 1])]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
     statistics = [np.mean, np.median]
 
     ns = [4, 8, 16, 32, 64, 128, 256]
     Bs = [10, 100, 1000]
-    repetitions = 1000
-    run_comparison(dgps, statistics, ns, Bs, methods, alphas, repetitions, nr_processes=4, dont_repeat=True,
-                   append=False, sampling='hierarchical')
+    repetitions = 100
+
+    # run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns, nr_processes=4, dont_repeat=True,
+    #                append=False, sampling='hierarchical')
+
+    leaves = [2, 4, 8, 16, 32]
+    branches = [1, 3, 5, 7]
+    stds = [0.1, 1, 10]
+    levels = [2, 3, 4]
+    dgps = [DGPRandEff(seed, 0, [s for l in range(n_lvl)]) for n_lvl in levels for s in stds]
+
+    run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, leaves=leaves, branches=branches, nr_processes=4,
+                   dont_repeat=True, append=True, sampling='hierarchical')
 
