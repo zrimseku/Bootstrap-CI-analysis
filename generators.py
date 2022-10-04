@@ -306,7 +306,7 @@ class DGPRandEff(DGP):
             return data
 
     def describe(self):
-        return type(self).__name__ + '_' + str(self.mean) + '_' + str(len(self.stds)) + 'lvl'
+        return type(self).__name__ + '_' + str(self.mean)
 
 
 if __name__ == '__main__':
