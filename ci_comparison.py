@@ -487,15 +487,15 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
 
     if sampling == 'hierarchical':
         cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B',
-                             'repetitions', 'balance', 'std'],
+                             'repetitions', 'balance', 'std', 'levels'],
                 'length': ['CI', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance',
-                           'std'] + all_methods,
+                           'std', 'levels'] + all_methods,
                 'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B',
-                             'repetitions', 'balance', 'std'],
-                'times': ['dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance', 'std'] +
-                         all_methods,
+                             'repetitions', 'balance', 'std', 'levels'],
+                'times': ['dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance', 'std',
+                          'levels'] + all_methods,
                 'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n_leaves',
-                              'n_branches', 'n', 'B', 'repetitions', 'balance', 'std']}
+                              'n_branches', 'n', 'B', 'repetitions', 'balance', 'std', 'levels']}
     else:
         cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
                 'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
@@ -508,7 +508,7 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
 
     if not append:
         # need to use this (append=False) for running first time to set header!!
-        print('Will delete all results - ARE YOU SURE???')
+        print(f'Will delete all results in {folder} - ARE YOU SURE???')
         time.sleep(6)
         for name in names:
             pd.DataFrame(columns=cols[name]).to_csv(f'{folder}/' + name + '.csv', index=False)
@@ -546,17 +546,19 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
 
                         for n_leaves in leaves:
                             for n_branches in branches:
+                                if n_leaves == 32 and n_lvls == 4:
+                                    continue
                                 same_pars = cov[
                                     (cov['dgp'] == dgp.describe()) & (cov['statistic'] == statistic.__name__) &
                                     (cov['n_leaves'] == n_leaves) & (cov['n_branches'] == n_branches) & (cov['B'] == B)
                                     & (cov['repetitions'] == repetitions) & (cov['balance'] == 'balanced')
-                                    & (cov['std'] == dgp.stds[0])]
+                                    & (cov['std'] == dgp.stds[0]) & (cov['levels'] == n_lvls)]
                                 if same_pars.shape[0] > 0:
                                     nr_skipped += 1
                                     continue
                                 else:
                                     print('Adding: ', dgp.describe(), statistic.__name__, n_leaves, n_branches, B,
-                                          repetitions)
+                                          repetitions, 'balanced', dgp.stds[0], n_lvls)
 
                                 group_sizes = [n_leaves for _ in range(n_branches)]
                                 n = n_leaves * n_branches
@@ -613,6 +615,7 @@ def multiprocess_run_function(param_tuple):
             dfs[i]['n_branches'] = n_branches
             dfs[i]['balance'] = balance
             dfs[i]['std'] = dgp.stds[0]         # TODO change if we'll have different on different levels
+            dfs[i]['levels'] = len(dgp.stds)
 
         dfs[i]['n'] = n
         dfs[i]['dgp'] = dgp.describe()
@@ -656,18 +659,22 @@ if __name__ == '__main__':
     statistics = [np.mean, np.median]
 
     ns = [4, 8, 16, 32, 64, 128, 256]
-    Bs = [10, 100, 1000]
-    repetitions = 100
+    # Bs = [10, 100, 1000]
+    Bs = [1000]
+
+    repetitions = 1000
 
     # run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns, nr_processes=4, dont_repeat=True,
     #                append=False, sampling='hierarchical')
 
     leaves = [2, 4, 8, 16, 32]
     branches = [1, 3, 5, 7]
-    stds = [0.1, 1, 10]
-    levels = [2, 3, 4]
+    # stds = [0.1, 1, 10]
+    stds = [1]
+    # levels = [2, 3, 4]
+    levels = [2, 3]
     dgps = [DGPRandEff(seed, 0, [s for l in range(n_lvl)]) for n_lvl in levels for s in stds]
 
     run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, leaves=leaves, branches=branches, nr_processes=4,
-                   dont_repeat=True, append=True, sampling='hierarchical')
+                   dont_repeat=True, append=False, sampling='hierarchical')
 
