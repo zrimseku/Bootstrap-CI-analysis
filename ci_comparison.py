@@ -52,12 +52,16 @@ class CompareIntervals:
         self.lengths = {}
         self.use_jit = use_jit
         self.sampling = sampling
-        self.sampling_parameters = sampling_parameters
-        if group_sizes is None:
-            max_groups_l1 = np.random.randint(2, min(5, int(self.n / 2) + 1))  # TODO smarter selection, 3 levels
-            self.group_sizes = [max_groups_l1, 2 * self.n / max_groups_l1]  # TODO change to max_group_sizes when needed
-        else:
-            self.group_sizes = group_sizes
+
+        # used for hierarchical sampling
+        if sampling == 'hierarchical':
+            self.sampling_parameters = sampling_parameters
+            if group_sizes is None:
+                max_groups_l1 = np.random.randint(2, min(5, int(self.n / 2) + 1))  # TODO smarter selection, 3 levels
+                self.group_sizes = [max_groups_l1, 2 * self.n / max_groups_l1]  # TODO max_group_sizes when needed
+            else:
+                self.group_sizes = group_sizes
+            self.variance_ratio = sum(np.array(self.dgp.stds) ** 2)     # ground truth variance
 
     def compute_bootstrap_intervals(self, data: np.array):
         # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
@@ -99,6 +103,11 @@ class CompareIntervals:
                 bts.evaluate_statistic(sampling='hierarchical',  sampling_args={'method': sampling_method,
                                                                                 'strategy': strategy_bool})
                 ts = time.time() - t            # time needed for sampling (will add it to all methods)
+
+                # calculation of variance ratio
+                var_bts = self.compute_hierarchical_var(bts)
+                # TODO what statistic of this var to save?
+
                 for method in self.methods:
                     if method not in bts.implemented_methods:
                         # skip non-bootstrap methods during calculation of bootstrap CI
@@ -117,6 +126,47 @@ class CompareIntervals:
                     # print('finished', method_str)
                 btss.append(bts)
         return btss
+
+    def compute_hierarchical_var(self, bts):
+        values = bts.original_sample[bts.bootstrap_indices]
+
+        mean = np.mean(values, axis=1, keepdims=True)
+        errors = values - mean
+
+        def flatten(indices):
+            if isinstance(indices[0], int):
+                return indices
+            else:
+                return flatten(list(itertools.chain.from_iterable(indices)))
+
+        indices = bts.group_indices.copy()
+        random_effects = []
+        group_sizes = []
+
+        # calculation of stds without sigma_e
+        while isinstance(indices[0], list):
+            lvl_indices = [flatten(g) for g in indices]
+            lvl_predictors = [np.mean(errors[:, ind], axis=1, keepdims=True) for ind in lvl_indices]
+            lvl_stds = np.array([np.std(errors[:, ind], axis=1) for ind in lvl_indices])        # n_groups x b array
+            group_sizes.append([len(flatten(g)) for g in indices])
+
+            for pred, ind in zip(lvl_predictors, lvl_indices):
+                errors[:, ind] -= pred  # leave only residuals of next level in errors
+
+            random_effects.append(np.mean(lvl_stds, axis=0))        # mean over all groups on this level TODO stds/vars?
+            indices = list(itertools.chain.from_iterable(indices))
+
+        # calculate E[Var] (and E[Cov]?)
+        evar = 0
+        for gs, re in zip(group_sizes, random_effects):
+            evar += (bts.n**2 - sum(np.array(gs)**2)) / bts.n**2 * re**2
+
+        # add sigma_e part
+        evar += (bts.n - 1) / bts.n * np.std(errors, axis=1) ** 2
+
+        evar2 = np.var(values, axis=1)
+
+        return evar             # mean/95CI ??
 
     def compute_non_bootstrap_intervals(self, data: np.array):
         """
@@ -675,6 +725,12 @@ if __name__ == '__main__':
     levels = [2, 3]
     dgps = [DGPRandEff(seed, 0, [s for l in range(n_lvl)]) for n_lvl in levels for s in stds]
 
-    run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, leaves=leaves, branches=branches, nr_processes=4,
-                   dont_repeat=True, append=False, sampling='hierarchical')
+    # run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, leaves=leaves, branches=branches, nr_processes=1,
+    #                dont_repeat=True, append=False, sampling='hierarchical')
+
+    sampling_parameters = {'strategies': list(itertools.product([0, 1], repeat=3)),
+                           'sampling_methods': ['cases']}
+    group_sizes = [[8 for _ in range(5)] for _ in range(5)]
+    multiprocess_run_function((((np.mean, methods, dgps[1], 8*5*5, 100, alphas.copy()),
+                               (group_sizes, sampling_parameters, 8, 5, 'balanced')), repetitions, 0.9, None, 'hierarchical'))
 
