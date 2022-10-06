@@ -146,14 +146,14 @@ class CompareIntervals:
         # calculation of stds without sigma_e
         while isinstance(indices[0], list):
             lvl_indices = [flatten(g) for g in indices]
-            lvl_predictors = [np.mean(errors[:, ind], axis=1, keepdims=True) for ind in lvl_indices]
-            lvl_stds = np.array([np.std(errors[:, ind], axis=1) for ind in lvl_indices])        # n_groups x b array
+            lvl_predictors = [np.mean(errors[:, ind], axis=1) for ind in lvl_indices]  # groups x b array
+            lvl_std = np.std(np.array(lvl_predictors), axis=0)
             group_sizes.append([len(flatten(g)) for g in indices])
 
             for pred, ind in zip(lvl_predictors, lvl_indices):
-                errors[:, ind] -= pred  # leave only residuals of next level in errors
+                errors[:, ind] -= np.expand_dims(pred, axis=1)  # leave only residuals of next level in errors
 
-            random_effects.append(np.mean(lvl_stds, axis=0))        # mean over all groups on this level TODO stds/vars?
+            random_effects.append(lvl_std)
             indices = list(itertools.chain.from_iterable(indices))
 
         # calculate E[Var] (and E[Cov]?)
