@@ -4,6 +4,7 @@ import time
 from itertools import repeat
 from multiprocessing import Pool
 
+import numpy
 import numpy as np
 import pandas as pd
 import scipy
@@ -61,7 +62,11 @@ class CompareIntervals:
                 self.group_sizes = [max_groups_l1, 2 * self.n / max_groups_l1]  # TODO max_group_sizes when needed
             else:
                 self.group_sizes = group_sizes
-            self.variance_ratio = sum(np.array(self.dgp.stds) ** 2)     # ground truth variance
+            self.gt_variance = sum(np.array(self.dgp.stds) ** 2)     # ground truth variance
+            self.variances = {m + sstr: {'mean': [], '95CI_l': [], '95CI_h': []}
+                              for sstr in ['_' + ''.join([str(s) for s in strategy])
+                                           for strategy in sampling_parameters['strategies']]
+                              for m in sampling_parameters['sampling_methods']}     # sampling variances
 
     def compute_bootstrap_intervals(self, data: np.array):
         # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
@@ -106,7 +111,11 @@ class CompareIntervals:
 
                 # calculation of variance ratio
                 var_bts = compute_hierarchical_var(bts)
-                # TODO what statistic of this var to save?
+                self.variances[sampling_method + strategy_str]['mean'].append(np.mean(var_bts))
+                self.variances[sampling_method + strategy_str]['95CI_l'].append(np.quantile(var_bts, 0.025,
+                                                                                            method='median_unbiased'))
+                self.variances[sampling_method + strategy_str]['95CI_h'].append(np.quantile(var_bts, 0.975,
+                                                                                            method='median_unbiased'))
 
                 for method in self.methods:
                     if method not in bts.implemented_methods:
@@ -376,6 +385,13 @@ class CompareIntervals:
         coverage_df = pd.DataFrame({'method': cov_methods, 'alpha': cov_alphas,
                                     'coverage': [self.coverages[m][a] for m, a in zip(cov_methods, cov_alphas)]})
 
+        if self.sampling == 'hierarchical':
+            var_coverage = [np.mean((np.array(self.variances['_'.join(m.split('_')[:2])]['95CI_l'][-repetitions:]) <
+                                     self.gt_variance) & (self.gt_variance <
+                                     np.array(self.variances['_'.join(m.split('_')[:2])]['95CI_h'][-repetitions:])))
+                            for m in cov_methods]
+            coverage_df['var_coverage'] = var_coverage
+
         sns.barplot(x="alpha", hue="method", y="coverage", data=coverage_df, hue_order=methods_to_use)
 
         plt.axhline(y=self.alphas[0], xmin=0, xmax=1 / len(self.alphas), linestyle='--', color='gray', label='expected')
@@ -442,6 +458,24 @@ class CompareIntervals:
         df_intervals = pd.DataFrame([{'method': m, 'alpha': a, 'predicted': v, 'true_value': true_val}
                                      for m in self.computed_intervals.keys() for a in self.computed_intervals[m].keys()
                                      for v in self.computed_intervals[m][a]])
+
+        if self.sampling == 'hierarchical':
+            df_intervals['gt_variance'] = self.gt_variance
+            # np.nan to skip methods for which variances are not calculated (i.e. exact)
+            nn = numpy.empty(repetitions)
+            nn[:] = np.nan
+            df_intervals['mean_var'] = np.concatenate([self.variances['_'.join(m.split('_')[:2])]['mean']
+                                                      if m in self.methods_hierarchical else nn
+                                                      for m in self.computed_intervals.keys()
+                                                      for _ in self.computed_intervals[m].keys()])
+            df_intervals['95CI_var_l'] = np.concatenate([self.variances['_'.join(m.split('_')[:2])]['95CI_l']
+                                                        if m in self.methods_hierarchical else nn
+                                                        for m in self.computed_intervals.keys()
+                                                        for _ in self.computed_intervals[m].keys()])
+            df_intervals['95CI_var_h'] = np.concatenate([self.variances['_'.join(m.split('_')[:2])]['95CI_h']
+                                                        if m in self.methods_hierarchical else nn
+                                                        for m in self.computed_intervals.keys()
+                                                        for _ in self.computed_intervals[m].keys()])
 
         return res, coverage_df, df_length, df_times, df_distance, df_intervals
 
@@ -538,7 +572,7 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
 
     if sampling == 'hierarchical':
         cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B',
-                             'repetitions', 'balance', 'std', 'levels'],
+                             'repetitions', 'balance', 'std', 'levels', 'var_coverage'],
                 'length': ['CI', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance',
                            'std', 'levels'] + all_methods,
                 'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B',
@@ -546,7 +580,9 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
                 'times': ['dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance', 'std',
                           'levels'] + all_methods,
                 'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n_leaves',
-                              'n_branches', 'n', 'B', 'repetitions', 'balance', 'std', 'levels']}
+                              'n_branches', 'n', 'B', 'repetitions', 'balance', 'std', 'levels',
+                              'gt_variance', 'mean_var', '95CI_var_l', '95CI_var_h']}
+
     else:
         cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
                 'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
@@ -711,9 +747,9 @@ if __name__ == '__main__':
 
     ns = [4, 8, 16, 32, 64, 128, 256]
     # Bs = [10, 100, 1000]
-    Bs = [1000]
+    Bs = [100]
 
-    repetitions = 1000
+    repetitions = 100
 
     # run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns, nr_processes=4, dont_repeat=True,
     #                append=False, sampling='hierarchical')
@@ -726,12 +762,12 @@ if __name__ == '__main__':
     levels = [2, 3]
     dgps = [DGPRandEff(seed, 0, [s for l in range(n_lvl)]) for n_lvl in levels for s in stds]
 
-    # run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, leaves=leaves, branches=branches, nr_processes=1,
-    #                dont_repeat=True, append=False, sampling='hierarchical')
+    run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, leaves=leaves, branches=branches, nr_processes=1,
+                   dont_repeat=True, append=False, sampling='hierarchical')
 
-    sampling_parameters = {'strategies': list(itertools.product([0, 1], repeat=3)),
-                           'sampling_methods': ['cases']}
-    group_sizes = [[8 for _ in range(5)] for _ in range(5)]
-    multiprocess_run_function((((np.mean, methods, dgps[1], 8*5*5, 100, alphas.copy()),
-                               (group_sizes, sampling_parameters, 8, 5, 'balanced')), repetitions, 0.9, None, 'hierarchical'))
+    # sampling_parameters = {'strategies': list(itertools.product([0, 1], repeat=3)),
+    #                        'sampling_methods': ['cases']}
+    # group_sizes = [[8 for _ in range(5)] for _ in range(5)]
+    # multiprocess_run_function((((np.mean, methods, dgps[1], 8*5*5, 100, alphas.copy()),
+    #                            (group_sizes, sampling_parameters, 8, 5, 'balanced')), repetitions, 0.9, None, 'hierarchical'))
 
