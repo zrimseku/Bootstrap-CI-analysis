@@ -105,7 +105,7 @@ class CompareIntervals:
                 ts = time.time() - t            # time needed for sampling (will add it to all methods)
 
                 # calculation of variance ratio
-                var_bts = self.compute_hierarchical_var(bts)
+                var_bts = compute_hierarchical_var(bts)
                 # TODO what statistic of this var to save?
 
                 for method in self.methods:
@@ -126,47 +126,6 @@ class CompareIntervals:
                     # print('finished', method_str)
                 btss.append(bts)
         return btss
-
-    def compute_hierarchical_var(self, bts):
-        values = bts.original_sample[bts.bootstrap_indices]
-
-        mean = np.mean(values, axis=1, keepdims=True)
-        errors = values - mean
-
-        def flatten(indices):
-            if isinstance(indices[0], int):
-                return indices
-            else:
-                return flatten(list(itertools.chain.from_iterable(indices)))
-
-        indices = bts.group_indices.copy()
-        random_effects = []
-        group_sizes = []
-
-        # calculation of stds without sigma_e
-        while isinstance(indices[0], list):
-            lvl_indices = [flatten(g) for g in indices]
-            lvl_predictors = [np.mean(errors[:, ind], axis=1) for ind in lvl_indices]  # groups x b array
-            lvl_std = np.std(np.array(lvl_predictors), axis=0)
-            group_sizes.append([len(flatten(g)) for g in indices])
-
-            for pred, ind in zip(lvl_predictors, lvl_indices):
-                errors[:, ind] -= np.expand_dims(pred, axis=1)  # leave only residuals of next level in errors
-
-            random_effects.append(lvl_std)
-            indices = list(itertools.chain.from_iterable(indices))
-
-        # calculate E[Var] (and E[Cov]?)
-        evar = 0
-        for gs, re in zip(group_sizes, random_effects):
-            evar += (bts.n**2 - sum(np.array(gs)**2)) / bts.n**2 * re**2
-
-        # add sigma_e part
-        evar += (bts.n - 1) / bts.n * np.std(errors, axis=1) ** 2
-
-        evar2 = np.var(values, axis=1)
-
-        return evar             # mean/95CI ??
 
     def compute_non_bootstrap_intervals(self, data: np.array):
         """
@@ -485,6 +444,48 @@ class CompareIntervals:
                                      for v in self.computed_intervals[m][a]])
 
         return res, coverage_df, df_length, df_times, df_distance, df_intervals
+
+
+def compute_hierarchical_var(bts):
+    values = bts.original_sample[bts.bootstrap_indices]
+
+    mean = np.mean(values, axis=1, keepdims=True)
+    errors = values - mean
+
+    def flatten(indices):
+        if isinstance(indices[0], int):
+            return indices
+        else:
+            return flatten(list(itertools.chain.from_iterable(indices)))
+
+    indices = bts.group_indices.copy()
+    random_effects = []
+    group_sizes = []
+
+    # calculation of stds without sigma_e
+    while isinstance(indices[0], list):
+        lvl_indices = [flatten(g) for g in indices]
+        lvl_predictors = [np.mean(errors[:, ind], axis=1) for ind in lvl_indices]  # groups x b array
+        lvl_std = np.std(np.array(lvl_predictors), axis=0)
+        group_sizes.append([len(flatten(g)) for g in indices])
+
+        for pred, ind in zip(lvl_predictors, lvl_indices):
+            errors[:, ind] -= np.expand_dims(pred, axis=1)  # leave only residuals of next level in errors
+
+        random_effects.append(lvl_std)
+        indices = list(itertools.chain.from_iterable(indices))
+
+    # calculate E[Var] (and E[Cov]?)
+    evar = 0
+    for gs, re in zip(group_sizes, random_effects):
+        evar += (bts.n**2 - sum(np.array(gs)**2)) / bts.n**2 * re**2
+
+    # add sigma_e part
+    evar += (bts.n - 1) / bts.n * np.std(errors, axis=1) ** 2
+
+    evar2 = np.var(values, axis=1)
+
+    return evar             # mean/95CI ??
 
 
 def compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha):
