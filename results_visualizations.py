@@ -190,7 +190,7 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                                 title = f'{comparing}s for {statistic} using B = {B}, {level} levels, std {std}'
                                 compare_cov_dis_grid(df_part_part, comparing=comparing, filter_by=filter_by,
                                                      x='n_leaves', row='alpha', col='n_branches', title=title,
-                                                     save_add=f'{statistic}_{B}{additional}', scale=scale,
+                                                     save_add=f'{statistic}_{B}_{level}_{std}{additional}', scale=scale,
                                                      folder_add=folder_add, set_ylim=set_ylim)
 
                     else:
@@ -254,7 +254,7 @@ if __name__ == '__main__':
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
     main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
-                         stds=[0.1, 1, 10])
+                         stds=[0.1, 1, 10], set_ylim=False)
 
     # plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
     # plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
