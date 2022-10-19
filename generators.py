@@ -221,10 +221,10 @@ class DGPRandEff(DGP):
         self.true_statistics['std'] = stds  # TODO this depends on strategy, what to do? also other statistics
         self.group_sizes = None
 
-    def sample(self, group_sizes: list = None, nr_samples: int = 1, max_group_sizes: list = None) -> np.array:
+    def sample(self, sample_size: int = None, nr_samples: int = 1, group_sizes: list = None,
+               max_group_sizes: list = None) -> np.array:
         # TODO if nr_samples != 1, all samples have the same group_sizes -> OK? pomoje ne
         # TODO 2: drugačno samplanje da vemo groud truth skupin??
-        # a bi pustil not vsen sample_size, pa generira sam velikosti?
         if group_sizes is None:
             # we will generate groups on random, based on specified max sizes on each level
             if len(self.stds) != len(max_group_sizes):
@@ -258,12 +258,23 @@ class DGPRandEff(DGP):
             if isinstance(sizes, int):
                 return [next(cnt) for _ in range(sizes)]
             else:
-                return [get_indices(sizes[j], cnt) if isinstance(sizes[j], int) else
+                return [get_indices(sizes[j], cnt) if isinstance(sizes[j], int) else            # TODO wtf a ni isto
                         get_indices(sizes[j], cnt) for j in range(len(sizes))]
 
         self.group_indices = get_indices(group_sizes, counter)
 
-        sample_size = next(counter)
+        sample_size_true = next(counter)
+
+        if sample_size_true != sample_size:
+            if max_group_sizes is None:   # TODO not best way to check this, but group_sizes is not None anymore
+                raise ValueError(f'Actual sample size, obtained from group_sizes ({sample_size_true}) is not the same as '
+                                 f'specified sample_size ({sample_size}).')
+            else:
+                # group sizes are random, so they are probably not the same as specified sample_size. No error.
+                if sample_size is not None:
+                    print(f'Actual sample size, obtained from group_sizes ({sample_size_true}) is not the same as '
+                          f'specified sample_size ({sample_size}).')
+
         size = (nr_samples, sample_size)
         data = np.zeros(size) + self.mean
 
@@ -295,13 +306,13 @@ class DGPRandEff(DGP):
             return data
 
     def describe(self):
-        return type(self).__name__ + '_' + str(self.mean) + '_' + str(len(self.stds)) + 'lvl'
-        # TODO add info about group sizes?
+        return type(self).__name__ + '_' + str(self.mean)
 
 
 if __name__ == '__main__':
     dgp = DGPRandEff(1, 0, [100, None, 1, 0.1])
-    print(dgp.sample(max_group_sizes=[3, 4, 5, 4], nr_samples=3))
+    print(dgp.sample(max_group_sizes=[3, 4, 5, 4], nr_samples=3, sample_size=10))
+    print(dgp.group_sizes)
     print(dgp.describe())
 
 

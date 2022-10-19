@@ -90,7 +90,8 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
 
     g = sns.FacetGrid(df, row=row, col=col, margin_titles=True, sharex=True, sharey='row', palette=colors)
     if comparing == 'coverage':
-        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale, set_ylim=set_ylim, order=df[hue].unique())
+        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale, set_ylim=set_ylim, order=df[hue].unique(),
+                        hue=hue, x=x)
     else:
         g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=0, whis=[(100-ci)/2, 50 + ci/2],
               palette=colors)
@@ -130,12 +131,12 @@ def plot_coverage_bars(data, **kwargs):
     offsets = np.linspace(0, group_width - bar_width, n_levels)
     offsets -= offsets.mean()
 
-    bar_pos = np.arange(data['n'].nunique())
+    bar_pos = np.arange(data[kwargs['x']].nunique())
     for i, method in enumerate(kwargs['order']):
-        data_m = data[data['method'] == method]
+        data_m = data[data[kwargs['hue']] == method]
         offset = bar_pos + offsets[i]
-        # if data_m['ci'].shape[0] != 7:
-        #     a = 0
+        # if data_m['ci'].shape[0] == 0:
+        #     continue
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['coverage'], ec='k', label=method, color=colors[i])
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['low'], ec='k', color=colors[i])
 
@@ -159,31 +160,48 @@ def plot_coverage_bars(data, **kwargs):
 
     ax.axhline(a, linestyle='--', color='gray')
 
-    ax.set_xlabel('n')
+    ax.set_xlabel(kwargs['x'])
     ax.set_ylabel('coverage')
-    plt.xticks(bar_pos, sorted(data['n'].unique()))
+    plt.xticks(bar_pos, sorted(data[kwargs['x']].unique()))
 
 
-def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear', folder_add='', set_ylim=True):
+def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear', folder_add='', set_ylim=True,
+                         levels=None, stds=None):
     for comparing in ['coverage', 'distance']:
         df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
         # df = df[df['method'] != 'studentized']
         for statistic in ['mean', 'median', 'std', 'percentile_5', 'percentile_95', 'corr']:
             if B_as_method:
+                # TODO if comparing more Bs for one method on one plot
                 # a povprečit a vzet samo enega od B-jev za ostale metode?
                 pass
             else:
                 for B in [10, 100, 1000]:
                     df_part = df[(df['B'] == B) & (df['statistic'] == statistic)]
-                    if df_part.shape[0] == 0:
-                        print(statistic, B)
-                        continue
-                    title = f'{comparing}s for {statistic} using B = {B}'
-                    subfolder = '' if set_ylim else 'noylim'
-                    compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
-                                         col='dgp', title=title, save_add=f'{statistic}_{B}{additional}', scale=scale,
-                                         folder_add=folder_add, set_ylim=set_ylim, subfolder=subfolder)
-        del df
+
+                    if additional == 'hierarchical':
+                        for level in levels:
+                            for std in stds:
+                                df_part_part = df_part[(df_part['levels'] == level) & (df_part['std'] == std)]
+                                if df_part_part.shape[0] == 0:
+                                    print('Empty df for: ', statistic, B, level)
+                                    continue
+                                title = f'{comparing}s for {statistic} using B = {B}, {level} levels, std {std}'
+                                compare_cov_dis_grid(df_part_part, comparing=comparing, filter_by=filter_by,
+                                                     x='n_leaves', row='alpha', col='n_branches', title=title,
+                                                     save_add=f'{statistic}_{B}_{level}_{std}{additional}', scale=scale,
+                                                     folder_add=folder_add, set_ylim=set_ylim)
+
+                    else:
+                        if df_part.shape[0] == 0:
+                            print('Empty df for: ', statistic, B)
+                            continue
+                        title = f'{comparing}s for {statistic} using B = {B}'
+                        subfolder = '' if set_ylim else 'noylim'
+                        compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
+                                             col='dgp', title=title, save_add=f'{statistic}_{B}{additional}',
+                                             scale=scale, folder_add=folder_add, set_ylim=set_ylim, subfolder=subfolder)
+        del df      # clear space
 
 
 def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=None, save_add=None, scale='linear',
@@ -227,20 +245,37 @@ def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=Non
         plt.show()
 
 
+def compare_variances():
+    intervals = pd.read_csv('results_hierarchical/intervals.csv')
+    intervals['var_ratio'] = intervals['mean_var'] / intervals['gt_variance']
+
+    intervals = intervals[intervals['method'] != 'exact']
+    intervals['strat'] = intervals['method'].apply(lambda x: x.split('_')[1])
+    res_int = intervals[['strat', 'var_ratio']].groupby('strat').mean().sort_values(by='var_ratio')
+
+    coverage = pd.read_csv('results_hierarchical/coverage.csv')
+    # cov1 = cov[::2]
+    coverage['strat'] = coverage['method'].apply(lambda x: x.split('_')[1])
+    res_cov = coverage[['strat', 'var_coverage']].groupby('strat').mean().sort_values(by='var_coverage')
+
+    return res_int, res_cov
+
+
 if __name__ == '__main__':
-    folder_add = ''
+    folder_add = '_hierarchical'
     # subfolder='only_bts'
-    # additional = 'hierarchical'
-    additional = ''
+    additional = 'hierarchical'
+    # additional = ''
     cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, set_ylim=False)
+    # main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
+    #                      stds=[0.1, 1, 10], set_ylim=False)
 
     # plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
     # plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
 
-
+    print(compare_variances())
 
 
 
