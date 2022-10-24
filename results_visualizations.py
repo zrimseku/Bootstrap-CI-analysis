@@ -109,7 +109,6 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
         g.fig.suptitle(title, fontsize=16)
 
     if save_add is not None:
-        print(f'images{folder_add}/comparison/{subfolder}/compare_{comparing}_{x}_{row}_{col}_{save_add}.png')
         plt.savefig(f'images{folder_add}/comparison/{subfolder}/compare_{comparing}_{x}_{row}_{col}_{save_add}.png')
         print('saved')
         plt.close()
@@ -198,9 +197,10 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                             print('Empty df for: ', statistic, B)
                             continue
                         title = f'{comparing}s for {statistic} using B = {B}'
+                        subfolder = '' if set_ylim else 'noylim'
                         compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
                                              col='dgp', title=title, save_add=f'{statistic}_{B}{additional}',
-                                             scale=scale, folder_add=folder_add, set_ylim=set_ylim)
+                                             scale=scale, folder_add=folder_add, set_ylim=set_ylim, subfolder=subfolder)
         del df      # clear space
 
 
