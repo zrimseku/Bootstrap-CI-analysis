@@ -261,6 +261,53 @@ def compare_variances():
     return res_int, res_cov
 
 
+def aggregate_results(result_folder):
+    # reading and filtering coverage table
+    coverage = pd.read_csv(f'{result_folder}/coverage.csv')
+    coverage = coverage[coverage['B'] == 1000]
+    coverage = coverage[coverage['method'].isin(['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double',
+                                                 'studentized'])]
+
+    # calculations for table of closeness to the best method
+    coverage['difference'] = coverage['coverage'] - coverage['alpha']
+    coverage['abs_difference'] = abs(coverage['difference'])
+    min_distances = coverage[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n', 'B']]\
+        .sort_values('abs_difference').groupby(['alpha', 'dgp', 'statistic', 'n', 'B']).first()
+    coverage['min_distances'] = coverage.apply(
+        lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['abs_difference'], axis=1)
+    coverage['best_coverage'] = coverage.apply(
+        lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['coverage'], axis=1)
+    coverage['std'] = np.sqrt(coverage['best_coverage'] * (1 - coverage['best_coverage']) / coverage['repetitions'])
+    coverage['near_best'] = abs(coverage['best_coverage'] - coverage['coverage']) <= coverage['std']
+
+    # calculation for ranks
+    coverage['rank'] = coverage[['alpha', 'abs_difference', 'dgp', 'statistic', 'n', 'B']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n', 'B']).rank()
+
+    # tables
+    near_best = coverage[['method', 'near_best']].groupby(['method']).sum()
+
+    near_best_n = coverage[['method', 'near_best', 'n']].groupby(['method', 'n']).sum().unstack()
+    near_best_n.columns = near_best_n.columns.droplevel()
+    near_best = near_best.join(near_best_n)
+
+    near_best_stat = coverage[['method', 'near_best', 'statistic']].groupby(['method', 'statistic']).sum().unstack()
+    near_best_stat.columns = near_best_stat.columns.droplevel()
+    near_best = near_best.join(near_best_stat).sort_values(by='near_best', ascending=False)
+
+    avg_rank = coverage[['method', 'rank']].groupby(['method']).mean()
+
+    avg_rank_n = coverage[['method', 'rank', 'n']].groupby(['method', 'n']).mean().unstack()
+    avg_rank_n.columns = avg_rank_n.columns.droplevel()
+    avg_rank = avg_rank.join(avg_rank_n)
+
+    avg_rank_stat = coverage[['method', 'rank', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
+    avg_rank_stat.columns = avg_rank_stat.columns.droplevel()
+    avg_rank = avg_rank.join(avg_rank_stat).sort_values(by='rank')
+
+    return near_best, avg_rank
+
+
 if __name__ == '__main__':
     folder_add = '_hierarchical'
     # subfolder='only_bts'
@@ -275,7 +322,14 @@ if __name__ == '__main__':
     # plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
     # plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
 
-    print(compare_variances())
+    # for c in compare_variances():
+    #     print(c)
+
+    # for t in aggregate_results('results_10000_reps'):
+    #     print(t)
+
+    nb, ar = aggregate_results('results_10000_reps')
+    debug = True
 
 
 
