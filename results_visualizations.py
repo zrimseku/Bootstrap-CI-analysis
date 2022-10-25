@@ -261,24 +261,27 @@ def compare_variances():
     return res_int, res_cov
 
 
-def aggregate_results(result_folder):
+def aggregate_results(result_folder, methods=None):
     # reading and filtering coverage table
     coverage = pd.read_csv(f'{result_folder}/coverage.csv')
     coverage = coverage[coverage['B'] == 1000]
-    coverage = coverage[coverage['method'].isin(['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double',
-                                                 'studentized'])]
+    coverage = coverage[~(coverage['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95']) &
+                          (coverage['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
+    if methods is None:
+        methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
+    coverage = coverage[coverage['method'].isin(methods)]
 
     # calculations for table of closeness to the best method
     coverage['difference'] = coverage['coverage'] - coverage['alpha']
     coverage['abs_difference'] = abs(coverage['difference'])
-    min_distances = coverage[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n', 'B']]\
-        .sort_values('abs_difference').groupby(['alpha', 'dgp', 'statistic', 'n', 'B']).first()
+    min_distances = coverage[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n']]\
+        .sort_values('abs_difference').groupby(['alpha', 'dgp', 'statistic', 'n']).first()
     coverage['min_distances'] = coverage.apply(
         lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['abs_difference'], axis=1)
     coverage['best_coverage'] = coverage.apply(
         lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['coverage'], axis=1)
     coverage['std'] = np.sqrt(coverage['best_coverage'] * (1 - coverage['best_coverage']) / coverage['repetitions'])
-    coverage['near_best'] = abs(coverage['best_coverage'] - coverage['coverage']) <= coverage['std']
+    coverage['near_best'] = abs(coverage['best_coverage'] - coverage['coverage']) < coverage['std']
 
     # calculation for ranks
     coverage['rank'] = coverage[['alpha', 'abs_difference', 'dgp', 'statistic', 'n', 'B']].groupby(
@@ -305,7 +308,80 @@ def aggregate_results(result_folder):
     avg_rank_stat.columns = avg_rank_stat.columns.droplevel()
     avg_rank = avg_rank.join(avg_rank_stat).sort_values(by='rank')
 
+    # normalization
+    for m in avg_rank.index:
+        near_best.loc[m, 'near_best'] /= coverage[coverage['method'] == m].shape[0]
+        for n in coverage['n'].unique():
+            near_best.loc[m, n] /= coverage[(coverage['method'] == m) & (coverage['n'] == n)].shape[0]
+        for stat in coverage['statistic'].unique():
+            near_best.loc[m, stat] /= coverage[(coverage['method'] == m) & (coverage['statistic'] == stat)].shape[0]
+
     return near_best, avg_rank
+
+
+def better_methods(method, result_folder):
+    # reading and filtering coverage table
+    coverage = pd.read_csv(f'{result_folder}/coverage.csv')
+    coverage = coverage[coverage['B'] == 1000]
+    coverage = coverage[~(coverage['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95']) &
+                          (coverage['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
+
+    # calculations for table of closeness to the best method
+    coverage['difference'] = coverage['coverage'] - coverage['alpha']
+    coverage['abs_difference'] = abs(coverage['difference'])
+    min_distances = coverage[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n']] \
+        .sort_values('abs_difference').groupby(['alpha', 'dgp', 'statistic', 'n']).first()
+    coverage['min_distances'] = coverage.apply(
+        lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['abs_difference'], axis=1)
+    coverage['best_coverage'] = coverage.apply(
+        lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['coverage'], axis=1)
+    coverage['std'] = np.sqrt(coverage['best_coverage'] * (1 - coverage['best_coverage']) / coverage['repetitions'])
+    coverage['near_best'] = abs(coverage['best_coverage'] - coverage['coverage']) < coverage['std']
+
+    # calculation for ranks
+    coverage['rank'] = coverage[['alpha', 'abs_difference', 'dgp', 'statistic', 'n', 'B']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n', 'B']).rank()
+
+    # tables for how many times another method is better
+    coverage['better_diff'] = coverage[['method', 'alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n',
+                                        'repetitions']].groupby(['alpha', 'dgp', 'statistic', 'n']) \
+        .apply(better_diff_apply_fn, method)['better']
+
+    # tables
+    coverage = coverage[coverage['method'] != method]                       # filter out method we're comparing with
+    better_diff = coverage[['method', 'better_diff']].groupby(['method']).sum()
+
+    better_diff_n = coverage[['method', 'better_diff', 'n']].groupby(['method', 'n']).sum().unstack()
+    better_diff_n.columns = better_diff_n.columns.droplevel()
+    better_diff = better_diff.join(better_diff_n)
+
+    better_diff_stat = coverage[['method', 'better_diff', 'statistic']].groupby(['method', 'statistic']).sum().unstack()
+    better_diff_stat.columns = better_diff_stat.columns.droplevel()
+    better_diff = better_diff.join(better_diff_stat)
+
+    better_diff_dist = coverage[['method', 'better_diff', 'dgp']].groupby(['method', 'dgp']).sum().unstack()
+    better_diff_dist.columns = better_diff_dist.columns.droplevel()
+    better_diff = better_diff.join(better_diff_dist)
+
+    # normalization
+    for m in better_diff.index:
+        better_diff.loc[m, 'better_diff'] /= coverage[coverage['method'] == m].shape[0]
+        for n in coverage['n'].unique():
+            better_diff.loc[m, n] /= coverage[(coverage['method'] == m) & (coverage['n'] == n)].shape[0]
+        for stat in coverage['statistic'].unique():
+            better_diff.loc[m, stat] /= coverage[(coverage['method'] == m) & (coverage['statistic'] == stat)].shape[0]
+        for dgp in coverage['dgp'].unique():
+            better_diff.loc[m, dgp] /= coverage[(coverage['method'] == m) & (coverage['dgp'] == dgp)].shape[0]
+
+    return pd.melt(better_diff, ignore_index=False).sort_values(by='value', ascending=False)
+
+
+def better_diff_apply_fn(df, method):
+    val = df[df['method'] == method]['abs_difference'].values[0]            # value for method we're interested in
+    # abs_difference + std of another method is less then abs difference of double
+    df['better'] = (df['abs_difference'] + np.sqrt(df['coverage'] * (1 - df['coverage']) / df['repetitions'])) < val
+
+    return df
 
 
 if __name__ == '__main__':
@@ -327,6 +403,11 @@ if __name__ == '__main__':
 
     # for t in aggregate_results('results_10000_reps'):
     #     print(t)
+
+    result_folder = 'results_10000_reps'
+    method = 'double'
+
+    td = better_methods(method, result_folder)
 
     nb, ar = aggregate_results('results_10000_reps')
     debug = True
