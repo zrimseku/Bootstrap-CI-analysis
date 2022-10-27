@@ -1,4 +1,5 @@
 import time
+from collections import defaultdict
 
 import matplotlib.cm
 import scipy.stats
@@ -384,6 +385,39 @@ def better_diff_apply_fn(df, method):
     return df
 
 
+def average_distances(folder):
+    dist_dict = defaultdict(lambda: [0, 0])         # dict that counts [sum of distances, #]
+    nans = defaultdict(int)
+    with open(f'{folder}/distance.csv') as f:
+        f.readline()
+        for line in f:
+            method, alpha, distance, dgp, statistic, n, B, repetitions = line.strip('\n').split(',')
+            if distance == '':
+                nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
+                if (method, alpha, dgp, statistic, n, repetitions) not in dist_dict:
+                    # add missing keys for dataframe iteration
+                    dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = [0, 0]
+            else:
+                alpha, distance, n, B, repetitions = float(alpha), float(distance), int(n), int(B), int(repetitions)
+                if B != 1000:
+                    continue
+                dist_dict[(method, alpha, dgp, statistic, n, repetitions)][0] += abs(distance)
+                dist_dict[(method, alpha, dgp, statistic, n, repetitions)][1] += 1
+
+    avg_distances = pd.DataFrame(columns=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions', 'avg_distance',
+                                          'nans'])
+    for i, experiment in enumerate(dist_dict.keys()):
+        distance, reps = dist_dict[experiment]
+        if reps == 0:
+            avg_dist = np.nan
+        else:
+            avg_dist = distance / reps
+        avg_distances.loc[i] = [*experiment, avg_dist, nans[experiment]]
+
+    avg_distances.to_csv(f'{folder}/avg_abs_distances.csv', index=False)
+    return avg_distances
+
+
 if __name__ == '__main__':
     folder_add = '_hierarchical'
     # subfolder='only_bts'
@@ -404,13 +438,15 @@ if __name__ == '__main__':
     # for t in aggregate_results('results_10000_reps'):
     #     print(t)
 
-    result_folder = 'results_10000_reps'
-    method = 'double'
+    average_distances('results')
 
-    td = better_methods(method, result_folder)
-
-    nb, ar = aggregate_results('results_10000_reps')
-    debug = True
+    # result_folder = 'results_10000_reps'
+    # method = 'double'
+    #
+    # td = better_methods(method, result_folder)
+    #
+    # nb, ar = aggregate_results('results_10000_reps')
+    # debug = True
 
 
 
