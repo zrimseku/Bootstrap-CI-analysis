@@ -413,7 +413,7 @@ def average_distances(folder):
         f.readline()
         for line in f:
             method, alpha, distance, dgp, statistic, n, B, repetitions = line.strip('\n').split(',')
-            if B != 1000:
+            if B != '1000':
                 continue
             if distance == '':
                 nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
