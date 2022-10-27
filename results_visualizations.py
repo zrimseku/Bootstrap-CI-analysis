@@ -1,5 +1,6 @@
 import time
 from collections import defaultdict
+from os.path import exists
 
 import matplotlib.cm
 import scipy.stats
@@ -288,6 +289,11 @@ def aggregate_results(result_folder, methods=None):
     coverage['rank'] = coverage[['alpha', 'abs_difference', 'dgp', 'statistic', 'n', 'B']].groupby(
         ['alpha', 'dgp', 'statistic', 'n', 'B']).rank()
 
+    # distances
+    if not exists(f'{result_folder}/avg_abs_distances.csv'):
+        average_distances(result_folder)
+    avg_distances = pd.read_csv(f'{result_folder}/avg_abs_distances.csv')
+
     # tables
     near_best = coverage[['method', 'near_best']].groupby(['method']).sum()
 
@@ -309,6 +315,17 @@ def aggregate_results(result_folder, methods=None):
     avg_rank_stat.columns = avg_rank_stat.columns.droplevel()
     avg_rank = avg_rank.join(avg_rank_stat).sort_values(by='rank')
 
+    dist_table = avg_distances[['method', 'avg_distance']].groupby(['method']).mean()
+
+    dist_table_n = avg_distances[['method', 'avg_distance', 'n']].groupby(['method', 'n']).mean().unstack()
+    dist_table_n.columns = dist_table_n.columns.droplevel()
+    dist_table = dist_table.join(dist_table_n)
+
+    dist_table_stat = avg_distances[['method', 'avg_distance', 'statistic']]\
+        .groupby(['method', 'statistic']).mean().unstack()
+    dist_table_stat.columns = dist_table_stat.columns.droplevel()
+    dist_table = dist_table.join(dist_table_stat).sort_values(by='avg_distance')
+
     # normalization
     for m in avg_rank.index:
         near_best.loc[m, 'near_best'] /= coverage[coverage['method'] == m].shape[0]
@@ -317,7 +334,11 @@ def aggregate_results(result_folder, methods=None):
         for stat in coverage['statistic'].unique():
             near_best.loc[m, stat] /= coverage[(coverage['method'] == m) & (coverage['statistic'] == stat)].shape[0]
 
-    return near_best, avg_rank
+    # nans
+    nans = avg_distances[['method', 'nans']].groupby(['method']).sum()
+    nans = nans[nans['nans'] > 0].sort_values(by='nans', ascending=False)
+
+    return near_best, avg_rank, dist_table, nans
 
 
 def better_methods(method, result_folder):
@@ -438,15 +459,15 @@ if __name__ == '__main__':
     # for t in aggregate_results('results_10000_reps'):
     #     print(t)
 
-    average_distances('results')
+    # average_distances('results')
 
     # result_folder = 'results_10000_reps'
     # method = 'double'
     #
     # td = better_methods(method, result_folder)
     #
-    # nb, ar = aggregate_results('results_10000_reps')
-    # debug = True
+    nb, ar, ad, na = aggregate_results('results')
+    debug = True
 
 
 
