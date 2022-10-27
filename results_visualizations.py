@@ -413,6 +413,8 @@ def average_distances(folder):
         f.readline()
         for line in f:
             method, alpha, distance, dgp, statistic, n, B, repetitions = line.strip('\n').split(',')
+            if B != 1000:
+                continue
             if distance == '':
                 nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
                 if (method, alpha, dgp, statistic, n, repetitions) not in dist_dict:
@@ -420,8 +422,6 @@ def average_distances(folder):
                     dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = [0, 0]
             else:
                 alpha, distance, n, B, repetitions = float(alpha), float(distance), int(n), int(B), int(repetitions)
-                if B != 1000:
-                    continue
                 dist_dict[(method, alpha, dgp, statistic, n, repetitions)][0] += abs(distance)
                 dist_dict[(method, alpha, dgp, statistic, n, repetitions)][1] += 1
 
