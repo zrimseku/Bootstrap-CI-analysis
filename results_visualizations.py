@@ -76,24 +76,25 @@ def compare_alpha_cov_dis_by_n(df=None, comparing='coverage', alpha=0.95,  metho
 
 def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.95]}, x='n', row='statistic', col='dgp',
                          hue='method', save_add=None, title=None, ci=95, scale='linear', folder_add='', subfolder='',
-                         set_ylim=False):
+                         set_ylim=False, colors=None):
     if df is None:
         df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
 
     for key in filter_by.keys():
         df = df[df[key].isin(filter_by[key])]
 
-    nm = df['method'].nunique()
-    if nm > 10:
-        cols = plt.cm.tab20(np.linspace(0.05, 0.95, df['method'].nunique()))
-    else:
-        cols = plt.cm.tab10(np.linspace(0.05, 0.95, df['method'].nunique()))
-    colors = {m: c for (m, c) in zip(df['method'].unique(), cols)}
+    if colors is None:
+        nm = df['method'].nunique()
+        if nm > 10:
+            cols = plt.cm.tab20(np.linspace(0.05, 0.95, df['method'].nunique()))
+        else:
+            cols = plt.cm.tab10(np.linspace(0.05, 0.95, df['method'].nunique()))
+        colors = {m: c for (m, c) in zip(df['method'].unique(), cols)}
 
-    g = sns.FacetGrid(df, row=row, col=col, margin_titles=True, sharex=True, sharey='row', palette=colors)
+    g = sns.FacetGrid(df, row=row, col=col, margin_titles=True, sharex=True, sharey='row', palette=colors, aspect=2)
     if comparing == 'coverage':
-        g.map_dataframe(plot_coverage_bars, colors=cols, ci=ci, scale=scale, set_ylim=set_ylim, order=df[hue].unique(),
-                        hue=hue, x=x)
+        g.map_dataframe(plot_coverage_bars, colors=colors, ci=ci, scale=scale, set_ylim=set_ylim,
+                        order=df[hue].unique(), hue=hue, x=x)
     else:
         g.map(sns.boxplot, x, comparing, hue, hue_order=df[hue].unique(), fliersize=0, whis=[(100-ci)/2, 50 + ci/2],
               palette=colors)
@@ -139,8 +140,13 @@ def plot_coverage_bars(data, **kwargs):
         offset = bar_pos + offsets[i]
         # if data_m['ci'].shape[0] == 0:
         #     continue
-        plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['coverage'], ec='k', label=method, color=colors[i])
-        plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['low'], ec='k', color=colors[i])
+        plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['coverage'], label=method, color=colors[method],
+                ec=colors[method])
+        plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['low'], color=colors[method], ec=colors[method])
+        # TODO a rabmo še črtico dodatno?
+
+    for p in bar_pos[:-1]:
+        plt.axvline(p + 0.5, ls=':', alpha=0.2)
 
     a = data['alpha'].values[0]
     if a > 0.9:
@@ -169,9 +175,18 @@ def plot_coverage_bars(data, **kwargs):
 
 def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='linear', folder_add='', set_ylim=True,
                          levels=None, stds=None):
-    for comparing in ['coverage', 'distance']:
+    # for comparing in ['coverage', 'distance']:
+    for comparing in ['coverage']:
         df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
-        # df = df[df['method'] != 'studentized']
+        if 'method' in filter_by:
+            nm = len(filter_by['method'])
+        else:
+            nm = df['method'].nunique()
+        if nm > 10:
+            cols = plt.cm.tab20(np.linspace(0.05, 0.95, df['method'].nunique()))
+        else:
+            cols = plt.cm.tab10(np.linspace(0.05, 0.95, df['method'].nunique()))
+        colors = {m: c for (m, c) in zip(df['method'].unique(), cols)}
         for statistic in ['mean', 'median', 'std', 'percentile_5', 'percentile_95', 'corr']:
             if B_as_method:
                 # TODO if comparing more Bs for one method on one plot
@@ -192,7 +207,7 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                                 compare_cov_dis_grid(df_part_part, comparing=comparing, filter_by=filter_by,
                                                      x='n_leaves', row='alpha', col='n_branches', title=title,
                                                      save_add=f'{statistic}_{B}_{level}_{std}{additional}', scale=scale,
-                                                     folder_add=folder_add, set_ylim=set_ylim)
+                                                     folder_add=folder_add, set_ylim=set_ylim, colors=colors)
 
                     else:
                         if df_part.shape[0] == 0:
@@ -202,7 +217,8 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                         subfolder = '' if set_ylim else 'noylim'
                         compare_cov_dis_grid(df_part, comparing=comparing, filter_by=filter_by, x='n', row='alpha',
                                              col='dgp', title=title, save_add=f'{statistic}_{B}{additional}',
-                                             scale=scale, folder_add=folder_add, set_ylim=set_ylim, subfolder=subfolder)
+                                             scale=scale, folder_add=folder_add, set_ylim=set_ylim, subfolder=subfolder,
+                                             colors=colors)
         del df      # clear space
 
 
@@ -293,6 +309,7 @@ def aggregate_results(result_folder, methods=None):
     if not exists(f'{result_folder}/avg_abs_distances.csv'):
         average_distances(result_folder)
     avg_distances = pd.read_csv(f'{result_folder}/avg_abs_distances.csv')
+    avg_distances = avg_distances[avg_distances['method'].isin(methods)]
 
     # tables
     near_best = coverage[['method', 'near_best']].groupby(['method']).sum()
@@ -326,6 +343,26 @@ def aggregate_results(result_folder, methods=None):
     dist_table_stat.columns = dist_table_stat.columns.droplevel()
     dist_table = dist_table.join(dist_table_stat).sort_values(by='avg_distance')
 
+    # nans
+    nans = avg_distances[['method', 'nans', 'repetitions']].groupby(['method']).sum()
+    nans['nans'] /= nans['repetitions']
+    nans = nans.drop('repetitions', axis=1)
+
+    nans_n = avg_distances[['method', 'nans', 'n', 'repetitions']].groupby(['method', 'n']).sum().unstack()
+    nans_n['nans'] /= nans_n['repetitions']
+    nans_n = nans_n.drop('repetitions', axis=1)
+    nans_n.columns = nans_n.columns.droplevel()
+    nans = nans.join(nans_n)
+
+    nans_stat = avg_distances[['method', 'nans', 'statistic', 'repetitions']].groupby(['method',
+                                                                                       'statistic']).sum().unstack()
+    nans_stat['nans'] /= nans_stat['repetitions']
+    nans_stat = nans_stat.drop('repetitions', axis=1)
+    nans_stat.columns = nans_stat.columns.droplevel()
+    nans = nans.join(nans_stat)
+
+    nans = nans[nans['nans'] > 0].sort_values(by='nans', ascending=False)
+
     # normalization
     for m in avg_rank.index:
         near_best.loc[m, 'near_best'] /= coverage[coverage['method'] == m].shape[0]
@@ -333,10 +370,6 @@ def aggregate_results(result_folder, methods=None):
             near_best.loc[m, n] /= coverage[(coverage['method'] == m) & (coverage['n'] == n)].shape[0]
         for stat in coverage['statistic'].unique():
             near_best.loc[m, stat] /= coverage[(coverage['method'] == m) & (coverage['statistic'] == stat)].shape[0]
-
-    # nans
-    nans = avg_distances[['method', 'nans']].groupby(['method']).sum()
-    nans = nans[nans['nans'] > 0].sort_values(by='nans', ascending=False)
 
     return near_best, avg_rank, dist_table, nans
 
@@ -440,18 +473,16 @@ def average_distances(folder):
 
 
 if __name__ == '__main__':
-    folder_add = '_hierarchical'
-    # subfolder='only_bts'
-    additional = 'hierarchical'
-    # additional = ''
+    # folder_add = '_hierarchical'
+    folder_add = '_10000_reps'
+    subfolder = ''
+    # additional = 'hierarchical'
+    additional = ''
     cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    # main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
-    #                      stds=[0.1, 1, 10], set_ylim=False)
-
-    # plot_times_lengths_grid('length', scale='linear', folder_add=folder_add, save_add=additional)
-    # plot_times_lengths_grid('times', scale='linear', folder_add=folder_add, save_add=additional)
+    main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
+                         stds=[0.1, 1, 10], set_ylim=True)
 
     # for c in compare_variances():
     #     print(c)
@@ -466,8 +497,8 @@ if __name__ == '__main__':
     #
     # td = better_methods(method, result_folder)
     #
-    nb, ar, ad, na = aggregate_results('results')
-    debug = True
+    # nb, ar, ad, na = aggregate_results('results_10000_reps')
+    # debug = True
 
 
 
