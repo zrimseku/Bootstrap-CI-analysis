@@ -413,7 +413,8 @@ def average_distances(folder):
         f.readline()
         for line in f:
             method, alpha, distance, dgp, statistic, n, B, repetitions = line.strip('\n').split(',')
-            if B != '1000':
+            if B != '1000' or method == 'ci_corr_spearman' or (statistic in ['percentile_5', 'percentile_95', 'median']
+                                                               and dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']):
                 continue
             if distance == '':
                 nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
@@ -459,15 +460,15 @@ if __name__ == '__main__':
     # for t in aggregate_results('results_10000_reps'):
     #     print(t)
 
-    # average_distances('results')
+    average_distances('results')
 
     # result_folder = 'results_10000_reps'
     # method = 'double'
     #
     # td = better_methods(method, result_folder)
     #
-    nb, ar, ad, na = aggregate_results('results')
-    debug = True
+    # nb, ar, ad, na = aggregate_results('results')
+    # debug = True
 
 
 
