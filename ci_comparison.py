@@ -371,14 +371,10 @@ class CompareIntervals:
             plt.savefig(f'images/{ci}CI_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
             plt.close()
 
-    def plot_results(self, repetitions, length=0.9, show=False):
+    def combine_results(self, repetitions, length=0.9):
         res = self.compare_intervals(repetitions, length)
 
-        folder = 'images_hierarchical' if self.sampling == 'hierarchical' else 'images'
-
-        title = f'{self.statistic.__name__} of {type(self.dgp).__name__} (n = {self.n}, B = {self.b})'
-
-        # building long dataframes for seaborn use
+        # building long dataframes
         methods_to_use = self.methods_hierarchical if self.sampling == 'hierarchical' else self.methods
         cov_methods = list(methods_to_use)*len(self.alphas)
         cov_alphas = np.repeat(self.alphas, len(methods_to_use))
@@ -392,74 +388,24 @@ class CompareIntervals:
                             for m in cov_methods]
             coverage_df['var_coverage'] = var_coverage
 
-        sns.barplot(x="alpha", hue="method", y="coverage", data=coverage_df, hue_order=methods_to_use)
-
-        plt.axhline(y=self.alphas[0], xmin=0, xmax=1 / len(self.alphas), linestyle='--', color='gray', label='expected')
-        for i in range(1, len(self.alphas)):
-            plt.axhline(y=self.alphas[i], xmin=i/len(self.alphas), xmax=(i + 1)/len(self.alphas), linestyle='--',
-                        color='gray')
-
-        plt.legend(loc='upper left')
-        plt.title('True coverages of ' + title)
-        if show:
-            plt.show()
-        else:
-            plt.savefig(f'{folder}/coverages_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
-            plt.close()
-
-        df_distance = pd.DataFrame({'method': np.repeat(cov_methods, repetitions),
-                                    'alpha': np.repeat(cov_alphas, repetitions),
-                                    'distance': np.concatenate([self.distances_from_exact[m][a][-repetitions:]
-                                                                for m, a in zip(cov_methods, cov_alphas)])})
-
-        plt.figure(figsize=(15, 6))
-
-        # if np.inf in df_distance.values:      TODO inf vals in 0.975 for ci_quant_nonparam, change this??
-        #     print()
-
-        sns.boxplot(x="alpha", hue="method", y="distance", data=df_distance, hue_order=methods_to_use)
-        plt.axhline(y=0, linestyle='--', color='gray')
-
-        plt.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
-        plt.title('Distance from exact intervals for' + title)
-        plt.tight_layout()
-        if show:
-            plt.show()
-        else:
-            plt.savefig(f'{folder}/distance_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
-            plt.close()
+        df_distance = pd.DataFrame({'alpha': np.repeat(self.alphas, repetitions)} |
+                                   {m: np.concatenate([self.distances_from_exact[m][a][-repetitions:]
+                                                       for a in self.alphas]) for m in methods_to_use})
 
         df_length = pd.DataFrame({m: v[-repetitions:] for m, v in zip(self.lengths.keys(), self.lengths.values())})
         df_times = pd.DataFrame({m: v[-repetitions:] for m, v in zip(self.times.keys(), self.times.values())})
 
-        ax = sns.boxplot(data=df_length, order=methods_to_use)
-        ax.set_xticklabels(ax.get_xticklabels(), rotation=30)
-        plt.title(f'Lengths of {length} CI for ' + title)
-        plt.tight_layout()
-        if show:
-            plt.show()
-        else:
-            plt.savefig(f'{folder}/length{int(length*100)}_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_'
-                        f'B{self.b}.png')
-            plt.close()
-
         # times are for all alphas combined TODO: divide them?
-        ax = sns.boxplot(data=df_times, order=methods_to_use)
-        ax.set_xticklabels(ax.get_xticklabels(), rotation=30)
-        plt.title('Calculation times for ' + title)
-        plt.tight_layout()
-        if show:
-            plt.show()
-        else:
-            plt.savefig(f'{folder}/times_{self.statistic.__name__}_{type(self.dgp).__name__}_n{self.n}_B{self.b}.png')
-            plt.close()
 
         true_val = self.dgp.get_true_value(self.statistic.__name__)
-        df_intervals = pd.DataFrame([{'method': m, 'alpha': a, 'predicted': v, 'true_value': true_val}
-                                     for m in self.computed_intervals.keys() for a in self.computed_intervals[m].keys()
-                                     for v in self.computed_intervals[m][a]])
 
+        # TODO fix variance saving for hierarchical methods (not made for wide table, so still saving long)
         if self.sampling == 'hierarchical':
+            df_intervals = pd.DataFrame([{'method': m, 'alpha': a, 'predicted': v, 'true_value': true_val}
+                                         for m in self.computed_intervals.keys() for a in
+                                         self.computed_intervals[m].keys()
+                                         for v in self.computed_intervals[m][a]])
+
             df_intervals['gt_variance'] = self.gt_variance
             # np.nan to skip methods for which variances are not calculated (i.e. exact)
             nn = numpy.empty(repetitions)
@@ -476,6 +422,12 @@ class CompareIntervals:
                                                         if m in self.methods_hierarchical else nn
                                                         for m in self.computed_intervals.keys()
                                                         for _ in self.computed_intervals[m].keys()])
+
+        else:
+            # saving wide table for nonparametric sampling
+            df_intervals = pd.DataFrame([{'alpha': a, 'true_value': true_val} |
+                                         {m: self.computed_intervals[m][a][i] for m in self.computed_intervals.keys()}
+                                         for a in self.alphas for i in range(repetitions)])
 
         return res, coverage_df, df_length, df_times, df_distance, df_intervals
 
@@ -575,8 +527,8 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
                              'repetitions', 'balance', 'std', 'levels', 'var_coverage'],
                 'length': ['CI', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance',
                            'std', 'levels'] + all_methods,
-                'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B',
-                             'repetitions', 'balance', 'std', 'levels'],
+                'distance': ['alpha', 'dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B',
+                             'repetitions', 'balance', 'std', 'levels'] + all_methods,
                 'times': ['dgp', 'statistic', 'n_leaves', 'n_branches', 'n', 'B', 'repetitions', 'balance', 'std',
                           'levels'] + all_methods,
                 'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n_leaves',
@@ -586,10 +538,10 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
     else:
         cols = {'coverage': ['method', 'alpha', 'coverage', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
                 'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
-                'distance': ['method', 'alpha', 'distance', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
+                'distance': ['alpha', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
                 'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
-                'intervals': ['method', 'alpha', 'predicted', 'true_value', 'dgp', 'statistic', 'n', 'B',
-                              'repetitions']}
+                'intervals': ['alpha', 'true_value', 'dgp', 'statistic', 'n', 'B',
+                              'repetitions'] + all_methods}
 
     folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results'
 
@@ -688,8 +640,8 @@ def multiprocess_run_function(param_tuple):
     use_jit = (repetitions >= 100)
     comparison = CompareIntervals(*pars, use_jit=use_jit, sampling=sampling, group_sizes=group_sizes,
                                   sampling_parameters=sampling_parameters)
-    _, coverage_df, df_length, df_times, df_distance, df_intervals = comparison.plot_results(repetitions=repetitions,
-                                                                                             length=length)
+    _, coverage_df, df_length, df_times, df_distance, df_intervals = comparison.combine_results(repetitions=repetitions,
+                                                                                                length=length)
     dfs = [coverage_df, df_length, df_times, df_distance, df_intervals]
 
     if sampling != 'hierarchical' and dgp.describe()[:9] != 'DGPBiNorm':
@@ -742,18 +694,19 @@ if __name__ == '__main__':
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBeta(seed, 10, 2), DGPBernoulli(seed, 0.5),
             DGPBernoulli(seed, 0.95), DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
-    dgps = [DGPBernoulli(seed, 0.5), DGPBernoulli(seed, 0.95)]
+    dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1)]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
-    statistics = [np.std]
+    statistics = [np.mean, np.std, np.median]
 
     ns = [4, 8, 16, 32, 64, 128, 256]
+    ns = [4, 8, 16]
     # Bs = [10, 100, 1000]
-    Bs = [1000]
+    Bs = [100]
 
     repetitions = 100
 
     run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns, nr_processes=4, dont_repeat=True,
-                   append=False, sampling='nonparametric')
+                   append=True, sampling='nonparametric')
 
     # leaves = [2, 4, 8, 16, 32]
     # branches = [1, 3, 5, 7]
