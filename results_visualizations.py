@@ -502,7 +502,7 @@ if __name__ == '__main__':
     # for t in aggregate_results('results_10000_reps'):
     #     print(t)
 
-    # average_distances('results')
+    average_distances('results')
 
     # result_folder = 'results_10000_reps'
     # method = 'double'
@@ -511,7 +511,4 @@ if __name__ == '__main__':
     #
     nb, ar, ad, na = aggregate_results('results_10000_reps')
     debug = True
-
-
-
 
