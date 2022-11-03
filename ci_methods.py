@@ -210,7 +210,7 @@ class Bootstrap:
         elif method == 'studentized':   # bootstrap-t, add more possible names for all that have multiple names?
             standard_errors = self.studentized_error_calculation()
             t_samples = (self.statistic_values - self.original_statistic_value) / standard_errors
-            se = np.std(self.statistic_values)      # tole naj bi bil se na original podatkih, kako to dobiš avtomatsko?
+            se = np.std(self.statistic_values)
             # TODO nanquantiles, skips standard errors that would be 0 - OK?
             return self.original_statistic_value - np.nanquantile(t_samples, 1 - quantiles, method=quantile_type) * se
 
