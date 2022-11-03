@@ -283,8 +283,8 @@ def aggregate_results(result_folder, methods=None):
     # reading and filtering coverage table
     coverage = pd.read_csv(f'{result_folder}/coverage.csv')
     coverage = coverage[coverage['B'] == 1000]
-    coverage = coverage[~(coverage['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95']) &
-                          (coverage['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
+    coverage = coverage[~coverage['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
+    #                       (coverage['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
     if methods is None:
         methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
     coverage = coverage[coverage['method'].isin(methods)]
@@ -309,7 +309,11 @@ def aggregate_results(result_folder, methods=None):
     if not exists(f'{result_folder}/avg_abs_distances.csv'):
         average_distances(result_folder)
     avg_distances = pd.read_csv(f'{result_folder}/avg_abs_distances.csv')
+
     avg_distances = avg_distances[avg_distances['method'].isin(methods)]
+    # TODO delete (potrebno samo za trenutno analizo z odvečnimi metodami - kasneje te izločimo vnaprej)
+    avg_distances = avg_distances[~avg_distances['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
+    #                                 (avg_distances['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
 
     # tables
     near_best = coverage[['method', 'near_best']].groupby(['method']).sum()
@@ -332,14 +336,14 @@ def aggregate_results(result_folder, methods=None):
     avg_rank_stat.columns = avg_rank_stat.columns.droplevel()
     avg_rank = avg_rank.join(avg_rank_stat).sort_values(by='rank')
 
-    dist_table = avg_distances[['method', 'avg_distance']].groupby(['method']).mean()
+    dist_table = avg_distances[['method', 'avg_distance']].groupby(['method']).median()
 
-    dist_table_n = avg_distances[['method', 'avg_distance', 'n']].groupby(['method', 'n']).mean().unstack()
+    dist_table_n = avg_distances[['method', 'avg_distance', 'n']].groupby(['method', 'n']).median().unstack()
     dist_table_n.columns = dist_table_n.columns.droplevel()
     dist_table = dist_table.join(dist_table_n)
 
     dist_table_stat = avg_distances[['method', 'avg_distance', 'statistic']]\
-        .groupby(['method', 'statistic']).mean().unstack()
+        .groupby(['method', 'statistic']).median().unstack()
     dist_table_stat.columns = dist_table_stat.columns.droplevel()
     dist_table = dist_table.join(dist_table_stat).sort_values(by='avg_distance')
 
@@ -370,6 +374,12 @@ def aggregate_results(result_folder, methods=None):
             near_best.loc[m, n] /= coverage[(coverage['method'] == m) & (coverage['n'] == n)].shape[0]
         for stat in coverage['statistic'].unique():
             near_best.loc[m, stat] /= coverage[(coverage['method'] == m) & (coverage['statistic'] == stat)].shape[0]
+
+    # combine tables, check differences in method ranking
+    joined_df = coverage.merge(avg_distances, on=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions'],
+                               how='outer')
+    joined_df['rank_dist'] = joined_df[['alpha', 'avg_distance', 'dgp', 'statistic', 'n', 'B']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n', 'B']).rank()
 
     return near_best, avg_rank, dist_table, nans
 
@@ -446,7 +456,8 @@ def average_distances(folder):
         f.readline()
         for line in f:
             method, alpha, distance, dgp, statistic, n, B, repetitions = line.strip('\n').split(',')
-            if B != '1000':
+            if B != '1000' or method == 'ci_corr_spearman' or (statistic in ['percentile_5', 'percentile_95', 'median']
+                                                               and dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']):
                 continue
             if distance == '':
                 nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
@@ -474,15 +485,16 @@ def average_distances(folder):
 
 if __name__ == '__main__':
     # folder_add = '_hierarchical'
-    folder_add = '_10000_reps'
+    # folder_add = '_10000_reps'
+    folder_add = ''
     subfolder = ''
     # additional = 'hierarchical'
     additional = ''
     cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
-                         stds=[0.1, 1, 10], set_ylim=True)
+    # main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
+    #                      stds=[0.1, 1, 10], set_ylim=True)
 
     # for c in compare_variances():
     #     print(c)
@@ -497,8 +509,8 @@ if __name__ == '__main__':
     #
     # td = better_methods(method, result_folder)
     #
-    # nb, ar, ad, na = aggregate_results('results_10000_reps')
-    # debug = True
+    nb, ar, ad, na = aggregate_results('results_10000_reps')
+    debug = True
 
 
 
