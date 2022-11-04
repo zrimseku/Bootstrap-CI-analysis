@@ -307,7 +307,7 @@ def aggregate_results(result_folder, methods=None):
 
     # distances
     if not exists(f'{result_folder}/avg_abs_distances.csv'):
-        average_distances(result_folder)
+        average_distances_long(result_folder)
     avg_distances = pd.read_csv(f'{result_folder}/avg_abs_distances.csv')
 
     avg_distances = avg_distances[avg_distances['method'].isin(methods)]
@@ -381,6 +381,8 @@ def aggregate_results(result_folder, methods=None):
     joined_df['rank_dist'] = joined_df[['alpha', 'avg_distance', 'dgp', 'statistic', 'n', 'B']].groupby(
         ['alpha', 'dgp', 'statistic', 'n', 'B']).rank()
 
+    # rank diff -> mean, median, kok kerih eksperimentov jih je med tistimi k majo > n razliko
+
     return near_best, avg_rank, dist_table, nans
 
 
@@ -449,15 +451,20 @@ def better_diff_apply_fn(df, method):
     return df
 
 
-def average_distances(folder):
+def average_distances_long(folder):
+    # for long tables (old results), skipping experiments with any nans
     dist_dict = defaultdict(lambda: [0, 0])         # dict that counts [sum of distances, #]
     nans = defaultdict(int)
     with open(f'{folder}/distance.csv') as f:
         f.readline()
         for line in f:
             method, alpha, distance, dgp, statistic, n, B, repetitions = line.strip('\n').split(',')
-            if B != '1000' or method == 'ci_corr_spearman' or (statistic in ['percentile_5', 'percentile_95', 'median']
-                                                               and dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']):
+            alpha, n, B, repetitions = float(alpha), int(n), int(B), int(repetitions)
+            # if B != '1000' or method == 'ci_corr_spearman' or (statistic in ['percentile_5', 'percentile_95', 'median
+            #                                                    and dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']):
+            # TODO which results to include
+            if B != 1000 or method == 'ci_corr_spearman' or (dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']) \
+                    or (statistic in ['percentile_95', 'percentile_5', 'corr'] and n == 4):
                 continue
             if distance == '':
                 nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
@@ -465,7 +472,7 @@ def average_distances(folder):
                     # add missing keys for dataframe iteration
                     dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = [0, 0]
             else:
-                alpha, distance, n, B, repetitions = float(alpha), float(distance), int(n), int(B), int(repetitions)
+                distance = float(distance)
                 dist_dict[(method, alpha, dgp, statistic, n, repetitions)][0] += abs(distance)
                 dist_dict[(method, alpha, dgp, statistic, n, repetitions)][1] += 1
 
@@ -477,9 +484,64 @@ def average_distances(folder):
             avg_dist = np.nan
         else:
             avg_dist = distance / reps
-        avg_distances.loc[i] = [*experiment, avg_dist, nans[experiment]]
+        avg_distances.loc[i] = [*experiment, avg_dist, nans[experiment] / experiment[-1]]
 
-    avg_distances.to_csv(f'{folder}/avg_abs_distances.csv', index=False)
+    avg_distances.to_csv(f'{folder}/avg_abs_distances_long.csv', index=False)
+    return avg_distances
+
+
+def average_distances_wide(folder, include_nan_repetitions=False):
+    # for wide tables (new results), skipping just replications that have nans
+    dist_dict = defaultdict(lambda: [0, 0])
+    nans = defaultdict(int)
+    bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
+    stat_methods = {'mean': bts_methods + ['wilcoxon', 'ttest'],
+                   'median': bts_methods + ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz_jarrett'],
+                   'std': bts_methods + ['chi_sq'],
+                   'percentile': bts_methods + ['ci_quant_param', 'ci_quant_nonparam', 'maritz_jarrett'],
+                   'corr': bts_methods + ['ci_corr_pearson', 'ci_corr_spearman']}
+    with open(f'{folder}/distance.csv') as f:
+        keys = f.readline().strip('\n').split(',')      # header
+        for line in f:
+            line_dict = dict(zip(keys, line.strip('\n').split(',')))
+            alpha, dgp, statistic, n, B, repetitions = [line_dict[name] for name in ['alpha', 'dgp', 'statistic', 'n',
+                                                                                     'B', 'repetitions']]
+            alpha, n, B, repetitions = float(alpha), int(n), int(B), int(repetitions)
+            if B != 100:
+                # TODO do we want to skip any more results?
+                continue
+
+            any_nan = False
+            for method in stat_methods[line_dict['statistic'][:10]]:
+                if line_dict[method] == '':
+                    any_nan = True
+                    nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
+
+                if (method, alpha, dgp, statistic, n, repetitions) not in dist_dict:
+                    # add missing keys for dataframe iteration
+                    dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = [0, 0]
+
+            if (not any_nan) or include_nan_repetitions:
+                for method in stat_methods[line_dict['statistic'][:10]]:
+                    distance = line_dict[method]
+                    if distance != '':
+                        distance = float(distance)
+                        dist_dict[(method, alpha, dgp, statistic, n, repetitions)][0] += abs(distance)
+                        dist_dict[(method, alpha, dgp, statistic, n, repetitions)][1] += 1
+
+                    # TODO do we need to add missing keys or add all nan experiments to dataframe?
+
+    avg_distances = pd.DataFrame(columns=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions', 'avg_distance',
+                                          'nans'])
+    for i, experiment in enumerate(dist_dict.keys()):
+        distance, reps = dist_dict[experiment]
+        if reps == 0:
+            avg_dist = np.nan
+        else:
+            avg_dist = distance / reps
+        avg_distances.loc[i] = [*experiment, avg_dist, nans[experiment] / experiment[-1]]
+
+    avg_distances.to_csv(f'{folder}/avg_abs_distances_wide.csv', index=False)
     return avg_distances
 
 
@@ -502,13 +564,13 @@ if __name__ == '__main__':
     # for t in aggregate_results('results_10000_reps'):
     #     print(t)
 
-    average_distances('results')
+    average_distances_wide('results')
 
     # result_folder = 'results_10000_reps'
     # method = 'double'
     #
     # td = better_methods(method, result_folder)
     #
-    nb, ar, ad, na = aggregate_results('results_10000_reps')
-    debug = True
+    # nb, ar, ad, na = aggregate_results('results_10000_reps')
+    # debug = True
 
