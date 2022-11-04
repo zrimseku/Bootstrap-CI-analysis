@@ -540,14 +540,14 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
                 'length': ['CI', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
                 'distance': ['alpha', 'dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
                 'times': ['dgp', 'statistic', 'n', 'B', 'repetitions'] + all_methods,
-                'intervals': ['alpha', 'true_value', 'dgp', 'statistic', 'n', 'B',
-                              'repetitions'] + all_methods}
+                'intervals': ['alpha', 'dgp', 'statistic', 'n', 'B', 'repetitions', 'true_value',
+                              'exact'] + all_methods}
 
     folder = 'results_hierarchical' if sampling == 'hierarchical' else 'results'
 
     if not append:
         # need to use this (append=False) for running first time to set header!!
-        print(f'Will delete all results in {folder} - ARE YOU SURE???')
+        print(f'Will delete all results in folder {folder} - ARE YOU SURE???')
         time.sleep(6)
         for name in names:
             pd.DataFrame(columns=cols[name]).to_csv(f'{folder}/' + name + '.csv', index=False)
@@ -696,7 +696,7 @@ if __name__ == '__main__':
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1)]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
-    statistics = [np.mean, np.std, np.median]
+    statistics = [np.mean, np.std]
 
     ns = [4, 8, 16, 32, 64, 128, 256]
     ns = [4, 8, 16]
@@ -706,7 +706,7 @@ if __name__ == '__main__':
     repetitions = 100
 
     run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns, nr_processes=4, dont_repeat=True,
-                   append=True, sampling='nonparametric')
+                   append=False, sampling='nonparametric')
 
     # leaves = [2, 4, 8, 16, 32]
     # branches = [1, 3, 5, 7]
