@@ -490,9 +490,9 @@ def average_distances_long(folder):
     return avg_distances
 
 
-def average_distances_wide(folder, include_nan_repetitions=False):
+def average_distances_wide(folder, include_nan_repetitions=False, combine=np.mean):
     # for wide tables (new results), skipping just replications that have nans
-    dist_dict = defaultdict(lambda: [0, 0])
+    dist_dict = defaultdict(list)
     nans = defaultdict(int)
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
     stat_methods = {'mean': bts_methods + ['wilcoxon', 'ttest'],
@@ -519,29 +519,38 @@ def average_distances_wide(folder, include_nan_repetitions=False):
 
                 if (method, alpha, dgp, statistic, n, repetitions) not in dist_dict:
                     # add missing keys for dataframe iteration
-                    dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = [0, 0]
+                    dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = []
 
             if (not any_nan) or include_nan_repetitions:
                 for method in stat_methods[line_dict['statistic'][:10]]:
                     distance = line_dict[method]
                     if distance != '':
                         distance = float(distance)
-                        dist_dict[(method, alpha, dgp, statistic, n, repetitions)][0] += abs(distance)
-                        dist_dict[(method, alpha, dgp, statistic, n, repetitions)][1] += 1
+                        dist_dict[(method, alpha, dgp, statistic, n, repetitions)].append(abs(distance))
 
-                    # TODO do we need to add missing keys or add all nan experiments to dataframe?
+                        # aggregating results as soon as we can to save memory
+                        if len(dist_dict[(method, alpha, dgp, statistic, n, repetitions)]) == repetitions:
+                            dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = combine(
+                                dist_dict[(method, alpha, dgp, statistic, n, repetitions)])
 
     avg_distances = pd.DataFrame(columns=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions', 'avg_distance',
                                           'nans'])
     for i, experiment in enumerate(dist_dict.keys()):
-        distance, reps = dist_dict[experiment]
-        if reps == 0:
-            avg_dist = np.nan
+        distances = dist_dict[experiment]
+        if type(distances) == list:
+            if len(distances) == 0:
+                avg_dist = np.nan
+            else:
+                avg_dist = combine(distances)
         else:
-            avg_dist = distance / reps
+            avg_dist = distances
         avg_distances.loc[i] = [*experiment, avg_dist, nans[experiment] / experiment[-1]]
 
-    avg_distances.to_csv(f'{folder}/avg_abs_distances_wide.csv', index=False)
+    # normalization of distances based on the best method
+    avg_distances['avg_distance'] = avg_distances[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
+
+    avg_distances.to_csv(f'{folder}/avg_abs_distances_wide_{combine.__name__}.csv', index=False)
     return avg_distances
 
 
@@ -564,7 +573,7 @@ if __name__ == '__main__':
     # for t in aggregate_results('results_10000_reps'):
     #     print(t)
 
-    average_distances_wide('results')
+    average_distances_wide('results', combine=np.median)
 
     # result_folder = 'results_10000_reps'
     # method = 'double'
