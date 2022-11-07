@@ -279,89 +279,72 @@ def compare_variances():
     return res_int, res_cov
 
 
-def aggregate_results(result_folder, methods=None):
+def aggregate_results(result_folder, methods=None, combined_with='mean'):
     # reading and filtering coverage table
-    coverage = pd.read_csv(f'{result_folder}/coverage.csv')
-    coverage = coverage[coverage['B'] == 1000]
-    coverage = coverage[~coverage['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
+    results = pd.read_csv(f'{result_folder}/results_combined_{combined_with}.csv')
+    # coverage = coverage[coverage['B'] == 1000]
+    # coverage = coverage[~coverage['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
     #                       (coverage['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
     if methods is None:
         methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
-    coverage = coverage[coverage['method'].isin(methods)]
+    results = results[results['method'].isin(methods)]
 
     # calculations for table of closeness to the best method
-    coverage['difference'] = coverage['coverage'] - coverage['alpha']
-    coverage['abs_difference'] = abs(coverage['difference'])
-    min_distances = coverage[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n']]\
+    results['difference'] = results['coverage'] - results['alpha']
+    results['abs_difference'] = abs(results['difference'])
+    min_distances = results[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n']]\
         .sort_values('abs_difference').groupby(['alpha', 'dgp', 'statistic', 'n']).first()
-    coverage['min_distances'] = coverage.apply(
+    results['min_distances'] = results.apply(
         lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['abs_difference'], axis=1)
-    coverage['best_coverage'] = coverage.apply(
+    results['best_coverage'] = results.apply(
         lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['coverage'], axis=1)
-    coverage['std'] = np.sqrt(coverage['best_coverage'] * (1 - coverage['best_coverage']) / coverage['repetitions'])
-    coverage['near_best'] = abs(coverage['best_coverage'] - coverage['coverage']) < coverage['std']
+    results['std'] = np.sqrt(results['best_coverage'] * (1 - results['best_coverage']) / results['repetitions'])
+    results['near_best'] = abs(results['best_coverage'] - results['coverage']) < results['std']
 
     # calculation for ranks
-    coverage['rank'] = coverage[['alpha', 'abs_difference', 'dgp', 'statistic', 'n', 'B']].groupby(
-        ['alpha', 'dgp', 'statistic', 'n', 'B']).rank()
-
-    # distances
-    if not exists(f'{result_folder}/avg_abs_distances.csv'):
-        average_distances_long(result_folder)
-    avg_distances = pd.read_csv(f'{result_folder}/avg_abs_distances.csv')
-
-    avg_distances = avg_distances[avg_distances['method'].isin(methods)]
-    # TODO delete (potrebno samo za trenutno analizo z odvečnimi metodami - kasneje te izločimo vnaprej)
-    avg_distances = avg_distances[~avg_distances['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
-    #                                 (avg_distances['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
+    results['rank'] = results[['alpha', 'abs_difference', 'dgp', 'statistic', 'n']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).rank()
 
     # tables
-    near_best = coverage[['method', 'near_best']].groupby(['method']).sum()
+    near_best = results[['method', 'near_best']].groupby(['method']).sum()
 
-    near_best_n = coverage[['method', 'near_best', 'n']].groupby(['method', 'n']).sum().unstack()
+    near_best_n = results[['method', 'near_best', 'n']].groupby(['method', 'n']).sum().unstack()
     near_best_n.columns = near_best_n.columns.droplevel()
     near_best = near_best.join(near_best_n)
 
-    near_best_stat = coverage[['method', 'near_best', 'statistic']].groupby(['method', 'statistic']).sum().unstack()
+    near_best_stat = results[['method', 'near_best', 'statistic']].groupby(['method', 'statistic']).sum().unstack()
     near_best_stat.columns = near_best_stat.columns.droplevel()
     near_best = near_best.join(near_best_stat).sort_values(by='near_best', ascending=False)
 
-    avg_rank = coverage[['method', 'rank']].groupby(['method']).mean()
+    avg_rank = results[['method', 'rank']].groupby(['method']).mean()
 
-    avg_rank_n = coverage[['method', 'rank', 'n']].groupby(['method', 'n']).mean().unstack()
+    avg_rank_n = results[['method', 'rank', 'n']].groupby(['method', 'n']).mean().unstack()
     avg_rank_n.columns = avg_rank_n.columns.droplevel()
     avg_rank = avg_rank.join(avg_rank_n)
 
-    avg_rank_stat = coverage[['method', 'rank', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
+    avg_rank_stat = results[['method', 'rank', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
     avg_rank_stat.columns = avg_rank_stat.columns.droplevel()
     avg_rank = avg_rank.join(avg_rank_stat).sort_values(by='rank')
 
-    dist_table = avg_distances[['method', 'avg_distance']].groupby(['method']).median()
+    dist_table = results[['method', 'avg_distance']].groupby(['method']).median()
 
-    dist_table_n = avg_distances[['method', 'avg_distance', 'n']].groupby(['method', 'n']).median().unstack()
+    dist_table_n = results[['method', 'avg_distance', 'n']].groupby(['method', 'n']).median().unstack()
     dist_table_n.columns = dist_table_n.columns.droplevel()
     dist_table = dist_table.join(dist_table_n)
 
-    dist_table_stat = avg_distances[['method', 'avg_distance', 'statistic']]\
+    dist_table_stat = results[['method', 'avg_distance', 'statistic']]\
         .groupby(['method', 'statistic']).median().unstack()
     dist_table_stat.columns = dist_table_stat.columns.droplevel()
     dist_table = dist_table.join(dist_table_stat).sort_values(by='avg_distance')
 
     # nans
-    nans = avg_distances[['method', 'nans', 'repetitions']].groupby(['method']).sum()
-    nans['nans'] /= nans['repetitions']
-    nans = nans.drop('repetitions', axis=1)
+    nans = results[['method', 'nans']].groupby(['method']).mean()
 
-    nans_n = avg_distances[['method', 'nans', 'n', 'repetitions']].groupby(['method', 'n']).sum().unstack()
-    nans_n['nans'] /= nans_n['repetitions']
-    nans_n = nans_n.drop('repetitions', axis=1)
+    nans_n = results[['method', 'nans', 'n']].groupby(['method', 'n']).mean().unstack()
     nans_n.columns = nans_n.columns.droplevel()
     nans = nans.join(nans_n)
 
-    nans_stat = avg_distances[['method', 'nans', 'statistic', 'repetitions']].groupby(['method',
-                                                                                       'statistic']).sum().unstack()
-    nans_stat['nans'] /= nans_stat['repetitions']
-    nans_stat = nans_stat.drop('repetitions', axis=1)
+    nans_stat = results[['method', 'nans', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
     nans_stat.columns = nans_stat.columns.droplevel()
     nans = nans.join(nans_stat)
 
@@ -369,21 +352,24 @@ def aggregate_results(result_folder, methods=None):
 
     # normalization
     for m in avg_rank.index:
-        near_best.loc[m, 'near_best'] /= coverage[coverage['method'] == m].shape[0]
-        for n in coverage['n'].unique():
-            near_best.loc[m, n] /= coverage[(coverage['method'] == m) & (coverage['n'] == n)].shape[0]
-        for stat in coverage['statistic'].unique():
-            near_best.loc[m, stat] /= coverage[(coverage['method'] == m) & (coverage['statistic'] == stat)].shape[0]
+        near_best.loc[m, 'near_best'] /= results[results['method'] == m].shape[0]
+        for n in results['n'].unique():
+            near_best.loc[m, n] /= results[(results['method'] == m) & (results['n'] == n)].shape[0]
+        for stat in results['statistic'].unique():
+            near_best.loc[m, stat] /= results[(results['method'] == m) & (results['statistic'] == stat)].shape[0]
 
-    # combine tables, check differences in method ranking
-    joined_df = coverage.merge(avg_distances, on=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions'],
-                               how='outer')
-    joined_df['rank_dist'] = joined_df[['alpha', 'avg_distance', 'dgp', 'statistic', 'n', 'B']].groupby(
-        ['alpha', 'dgp', 'statistic', 'n', 'B']).rank()
+    # check for differences in method ranking
+    results['rank_dist'] = results[['alpha', 'avg_distance', 'dgp', 'statistic', 'n']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).rank()
 
     # rank diff -> mean, median, kok kerih eksperimentov jih je med tistimi k majo > n razliko
 
-    return near_best, avg_rank, dist_table, nans
+    # gather all nans
+    nans_all = results[['method', 'nans', 'statistic', 'repetitions', 'dgp', 'n']].groupby(['method', 'statistic',
+                                                                                            'dgp', 'n']).mean()
+    nans_all = nans_all[nans_all['nans'] > 0]['nans'].sort_values(ascending=False)
+
+    return near_best, avg_rank, dist_table, nans_all
 
 
 def better_methods(method, result_folder):
@@ -503,7 +489,7 @@ def average_distances_long(folder, combine_dist=np.mean):
     return avg_distances
 
 
-def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions=False):
+def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions=False, only_bts=True):
     # for wide tables (new results), skipping just replications that have nans
     dist_dict = defaultdict(list)
     nans = defaultdict(int)
@@ -524,11 +510,12 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
             alpha, n, B, repetitions, true_val, exact = float(alpha), int(n), int(B), int(repetitions),\
                                                         float(true_val), float(exact)
             if B != 1000:
-                # TODO do we want to skip any more results? CHANGE B
+                # TODO do we want to skip any more results?
                 continue
 
             any_nan = False
-            for method in stat_methods[line_dict['statistic'][:10]]:
+            all_methods = bts_methods if only_bts else stat_methods[line_dict['statistic'][:10]]
+            for method in all_methods:
                 if line_dict[method] == '':
                     any_nan = True
                     nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
@@ -572,7 +559,8 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
     avg_distances['avg_distance'] = avg_distances[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
 
-    avg_distances.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}.csv', index=False)
+    avg_distances.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}{["_", "_bts"][int(only_bts)]}.csv',
+                         index=False)
     return avg_distances
 
 
@@ -581,7 +569,7 @@ def combine_results(combine_dist='mean'):
     old = pd.read_csv(f'results_10000_reps/avg_abs_distances_long_{combine_dist}.csv')
     old_cov = pd.read_csv('results_10000_reps/coverage.csv')
     old_cov = old_cov[old_cov['B'] == 1000]
-    old_cov.drop('B', axis=1)
+    old_cov = old_cov.drop('B', axis=1)
     old_cov = old_cov[(old_cov['method'] != 'ci_corr_spearman') &
                       ~old_cov['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
     old = old.merge(old_cov, how='outer', on=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions'],
@@ -625,7 +613,8 @@ if __name__ == '__main__':
 
     # results_from_intervals('results_wide_nans', combine_dist=np.median)
 
-    combine_results('median')
+    # combine_results('median')
+    aggregate_results('results', combined_with='mean')
 
     # result_folder = 'results_10000_reps'
     # method = 'double'
