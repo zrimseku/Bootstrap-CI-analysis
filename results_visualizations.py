@@ -509,9 +509,9 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
     coverage_dict = defaultdict(lambda: [0, 0])
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
     stat_methods = {'mean': bts_methods + ['wilcoxon', 'ttest'],
-                   'median': bts_methods + ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz_jarrett'],
+                   'median': bts_methods + ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                    'std': bts_methods + ['chi_sq'],
-                   'percentile': bts_methods + ['ci_quant_param', 'ci_quant_nonparam', 'maritz_jarrett'],
+                   'percentile': bts_methods + ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                    'corr': bts_methods + ['ci_corr_pearson', 'ci_corr_spearman']}
     with open(f'{folder}/intervals.csv') as f:
         keys = f.readline().strip('\n').split(',')      # header
