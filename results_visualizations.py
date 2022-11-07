@@ -465,6 +465,7 @@ def average_distances_long(folder, combine_dist=np.mean):
             # TODO which results to include
             if B != 1000 or method == 'ci_corr_spearman' or (dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']):
                 continue
+
             if distance == '':
                 nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
                 if (method, alpha, dgp, statistic, n, repetitions) not in dist_dict:
