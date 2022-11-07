@@ -575,11 +575,32 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
     return avg_distances
 
 
-def combine_results():
-    old = pd.read_csv('results_10000_reps/avg_abs_distances_long.csv')
+def combine_results(combine_dist='mean'):
+    """Combining old (long df) and new results into one df, same shape as the new ones should be."""
+    old = pd.read_csv(f'results_10000_reps/avg_abs_distances_long_{combine_dist}.csv')
     old_cov = pd.read_csv('results_10000_reps/coverage.csv')
-    old = old.merge(old_cov)
-    # pokaži nane (da vidmo če smo prov združil) in jih preskoči
+    old_cov = old_cov[old_cov['B'] == 1000]
+    old_cov.drop('B', axis=1)
+    old_cov = old_cov[(old_cov['method'] != 'ci_corr_spearman') &
+                      ~old_cov['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
+    old = old.merge(old_cov, how='outer', on=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions'],
+                    validate='one_to_one')
+
+    # delete results that we repeated and Bernoulli
+    old = old[old['statistic'].isin(['mean', 'std']) |
+              ((old['statistic'] == 'percentile_95') & (old['n'] > 64)) |
+              ((old['statistic'] == 'percentile_5') & (old['n'] > 16)) |
+              ((old['statistic'] == 'median') & (old['n'] > 4)) |
+              ((old['statistic'] == 'corr') & (old['n'] > 8))]
+
+    left_nans = old[old['nans'] > 0].shape[0]
+    if left_nans != 0:
+        print(left_nans, ' leftover experiments with nans.')
+
+    new = pd.read_csv(f'results_wide_nans/results_from_intervals_{combine_dist}.csv')
+
+    all_results = pd.concat([old, new])
+    all_results.to_csv(f'results/results_combined_{combine_dist}.csv', index=False)
 
 
 if __name__ == '__main__':
@@ -601,7 +622,9 @@ if __name__ == '__main__':
     # for t in aggregate_results('results_10000_reps'):
     #     print(t)
 
-    results_from_intervals('results', combine_dist=np.median)
+    # results_from_intervals('results_wide_nans', combine_dist=np.median)
+
+    combine_results('median')
 
     # result_folder = 'results_10000_reps'
     # method = 'double'
