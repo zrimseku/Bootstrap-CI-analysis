@@ -563,7 +563,9 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
                 avg_dist = combine_dist(distances)
         else:
             avg_dist = distances
-        avg_distances.loc[i] = [*experiment, avg_dist, covers / count, nans[experiment] / experiment[-1]]
+
+        avg_distances.loc[i] = [*experiment, avg_dist, 0 if count == 0 else covers / count,
+                                nans[experiment] / experiment[-1]]
 
     # normalization of distances based on the best method
     avg_distances['avg_distance'] = avg_distances[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
