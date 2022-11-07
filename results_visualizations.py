@@ -451,9 +451,9 @@ def better_diff_apply_fn(df, method):
     return df
 
 
-def average_distances_long(folder):
+def average_distances_long(folder, combine_dist=np.mean):
     # for long tables (old results), skipping experiments with any nans
-    dist_dict = defaultdict(lambda: [0, 0])         # dict that counts [sum of distances, #]
+    dist_dict = defaultdict(list)         # dict that counts [sum of distances, #]
     nans = defaultdict(int)
     with open(f'{folder}/distance.csv') as f:
         f.readline()
@@ -463,30 +463,42 @@ def average_distances_long(folder):
             # if B != '1000' or method == 'ci_corr_spearman' or (statistic in ['percentile_5', 'percentile_95', 'median
             #                                                    and dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']):
             # TODO which results to include
-            if B != 1000 or method == 'ci_corr_spearman' or (dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']) \
-                    or (statistic in ['percentile_95', 'percentile_5', 'corr'] and n == 4):
+            if B != 1000 or method == 'ci_corr_spearman' or (dgp in ['DGPBernoulli_0.5', 'DGPBernoulli_0.95']):
                 continue
             if distance == '':
                 nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
                 if (method, alpha, dgp, statistic, n, repetitions) not in dist_dict:
                     # add missing keys for dataframe iteration
-                    dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = [0, 0]
+                    dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = []
             else:
                 distance = float(distance)
-                dist_dict[(method, alpha, dgp, statistic, n, repetitions)][0] += abs(distance)
-                dist_dict[(method, alpha, dgp, statistic, n, repetitions)][1] += 1
+                dist_dict[(method, alpha, dgp, statistic, n, repetitions)].append(abs(distance))
+
+                # aggregating results as soon as we can to save memory
+                if len(dist_dict[(method, alpha, dgp, statistic, n, repetitions)]) == repetitions:
+                    # change list of distances with mean/median distance
+                    dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = combine_dist(
+                        dist_dict[(method, alpha, dgp, statistic, n, repetitions)])
 
     avg_distances = pd.DataFrame(columns=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions', 'avg_distance',
                                           'nans'])
     for i, experiment in enumerate(dist_dict.keys()):
-        distance, reps = dist_dict[experiment]
-        if reps == 0:
-            avg_dist = np.nan
+        distances = dist_dict[experiment]
+        if type(distances) == list:
+            if len(distances) == 0:
+                avg_dist = np.nan
+            else:
+                avg_dist = combine_dist(distances)
         else:
-            avg_dist = distance / reps
+            avg_dist = distances
+
         avg_distances.loc[i] = [*experiment, avg_dist, nans[experiment] / experiment[-1]]
 
-    avg_distances.to_csv(f'{folder}/avg_abs_distances_long.csv', index=False)
+    # normalization of distances based on the best method
+    avg_distances['avg_distance'] = avg_distances[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
+
+    avg_distances.to_csv(f'{folder}/avg_abs_distances_long_{combine_dist.__name__}.csv', index=False)
     return avg_distances
 
 
@@ -510,7 +522,7 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
                                                                           'repetitions', 'true_value', 'exact']]
             alpha, n, B, repetitions, true_val, exact = float(alpha), int(n), int(B), int(repetitions),\
                                                         float(true_val), float(exact)
-            if B != 100:
+            if B != 1000:
                 # TODO do we want to skip any more results? CHANGE B
                 continue
 
@@ -559,6 +571,13 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
 
     avg_distances.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}.csv', index=False)
     return avg_distances
+
+
+def combine_results():
+    old = pd.read_csv('results_10000_reps/avg_abs_distances_long.csv')
+    old_cov = pd.read_csv('results_10000_reps/coverage.csv')
+    old = old.merge(old_cov)
+    # pokaži nane (da vidmo če smo prov združil) in jih preskoči
 
 
 if __name__ == '__main__':
