@@ -145,7 +145,7 @@ class CompareIntervals:
         new_methods = {'mean': ['wilcoxon', 'ttest'],
                        'median': ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                        'std': ['chi_sq'], 'percentile': ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
-                       'corr': ['ci_corr_pearson', 'ci_corr_spearman']}
+                       'corr': ['ci_corr_pearson']}
         if self.statistic.__name__[:10] not in ['mean', 'median', 'std', 'percentile', 'corr']:
             print(f'No known non-bootstrap methods to use for statistic {self.statistic.__name__}.')
             new_methods[self.statistic.__name__] = []
@@ -209,16 +209,9 @@ class CompareIntervals:
                 ci[method] = np.sqrt((self.n - 1) * s ** 2 / qchisq)
                 self.times[method].append(time.time() - t)
 
-            elif method[:7] == 'ci_corr':
+            elif method == 'ci_corr_pearson':
                 t = time.time()
-                if method == 'ci_corr_pearson':
-                    in1 = data[:, 0]
-                    in2 = data[:, 1]
-                elif method == 'ci_corr_spearman':
-                    in1 = scipy.stats.rankdata(data[:, 0])
-                    in2 = scipy.stats.rankdata(data[:, 1])
-
-                res = scipy.stats.pearsonr(in1, in2, alternative='less')
+                res = scipy.stats.pearsonr(data[:, 0], data[:, 1], alternative='less')
                 ci[method] = [res.confidence_interval(a).high for a in self.alphas]
                 self.times[method].append(time.time() - t)
 
@@ -513,8 +506,7 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
     names = ['coverage', 'length', 'times', 'distance', 'intervals']
     if sampling == 'nonparametric':
         all_methods = ['percentile', 'basic', 'bca', 'bc', 'standard',  'smoothed', 'double', 'studentized', 'ttest',
-                       'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson',
-                       'ci_corr_spearman']
+                       'wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett', 'chi_sq', 'ci_corr_pearson']
     else:
         sampling_methods = np.concatenate([['cases' + ''.join(map(str, strat))
                                             for strat in itertools.product([0, 1], repeat=n_lvls)]
