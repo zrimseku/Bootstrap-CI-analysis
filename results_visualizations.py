@@ -620,7 +620,7 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
                             dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = combine_dist(
                                 dist_dict[(method, alpha, dgp, statistic, n, repetitions)])
 
-    avg_distances = pd.DataFrame(columns=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions', 'avg_distance',
+    results = pd.DataFrame(columns=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions', 'avg_distance',
                                           'std', 'coverage', 'nans'])
     for i, experiment in enumerate(dist_dict.keys()):
         distances = dist_dict[experiment]
@@ -636,16 +636,16 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
             avg_dist = distances
             std = stds[experiment]
 
-        avg_distances.loc[i] = [*experiment, avg_dist, std, np.nan if count == 0 else covers / count,
+        results.loc[i] = [*experiment, avg_dist, std, np.nan if count == 0 else covers / count,
                                 nans[experiment] / experiment[-1]]
 
     # normalization of distances based on the best method
-    avg_distances['avg_distance'] = avg_distances[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
+    results['avg_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
 
-    avg_distances.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}{["", "_bts"][int(only_bts)]}.csv',
+    results.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}{["", "_bts"][int(only_bts)]}.csv',
                          index=False)
-    return avg_distances
+    return results
 
 
 def combine_results(combine_dist='mean', only_bts=True):
