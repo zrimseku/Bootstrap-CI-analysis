@@ -178,6 +178,7 @@ class CompareIntervals:
 
             elif method in ['ci_quant_param', 'ci_quant_nonparam']:
                 t = time.time()
+                # 0.5 for median and 5 or 95 for percentiles:
                 quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[1])/100
 
                 if method == 'ci_quant_param':
