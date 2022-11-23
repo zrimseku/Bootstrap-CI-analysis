@@ -281,7 +281,9 @@ def compare_variances():
 
 def aggregate_results(result_folder, methods=None, combined_with='mean'):
     # reading and filtering coverage table
-    results = pd.read_csv(f'{result_folder}/results_combined_{combined_with}_bts.csv')
+    results = pd.read_csv(f'{result_folder}/results_from_intervals_{combined_with}_bts.csv')    # changed for only wide!
+
+    print('SPEARMAN', results[results['method'] == 'ci_corr_spearman'].shape)
     # coverage = coverage[coverage['B'] == 1000]
     # coverage = coverage[~coverage['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
     #                       (coverage['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
@@ -578,7 +580,7 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
                    'median': bts_methods + ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
                    'std': bts_methods + ['chi_sq'],
                    'percentile': bts_methods + ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
-                   'corr': bts_methods + ['ci_corr_pearson', 'ci_corr_spearman']}
+                   'corr': bts_methods + ['ci_corr_pearson']}
     with open(f'{folder}/intervals.csv') as f:
         keys = f.readline().strip('\n').split(',')      # header
         for line in f:
@@ -643,8 +645,8 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
     results['avg_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
 
-    results.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}{["", "_bts"][int(only_bts)]}.csv',
-                         index=False)
+    results.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}{["", "_bts"][int(only_bts)]}'
+                   f'{["", "_withnans"][int(include_nan_repetitions)]}.csv', index=False)
     return results
 
 
@@ -690,20 +692,21 @@ if __name__ == '__main__':
     cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    # main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
-    #                      stds=[0.1, 1, 10], set_ylim=True)
+    main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
+                         stds=[0.1, 1, 10], set_ylim=True)
 
     # for c in compare_variances():
     #     print(c)
 
+    for stat in [np.mean, np.median]:
+        for only_bts in [True, False]:
+            for include_nans in [True, False]:
+                results_from_intervals('results', combine_dist=stat, only_bts=only_bts,
+                                       include_nan_repetitions=include_nans)
+                # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    # for stat in [np.mean, np.median]:
-    #     for only_bts in [True, False]:
-    #         results_from_intervals('results_wide_nans', combine_dist=stat, only_bts=only_bts)
-    #         combine_results(stat.__name__, only_bts=only_bts)
-
-    for stat in ['mean', 'median']:
-        aggregate_results('results', combined_with=stat)
+    # for stat in ['mean', 'median']:
+    #     aggregate_results('results', combined_with=stat)
         # better_methods('double', 'results', stat)
 
     # better_methods_repetition_level('double', 'results_wide_nans')
