@@ -698,15 +698,20 @@ if __name__ == '__main__':
     # for c in compare_variances():
     #     print(c)
 
-    for stat in [np.mean, np.median]:
-        for only_bts in [True, False]:
-            for include_nans in [True, False]:
-                results_from_intervals('results', combine_dist=stat, only_bts=only_bts,
-                                       include_nan_repetitions=include_nans)
+    # for stat in [np.mean, np.median]:
+    #     for only_bts in [True, False]:
+    #         for include_nans in [True, False]:
+    #             results_from_intervals('results', combine_dist=stat, only_bts=only_bts,
+    #                                    include_nan_repetitions=include_nans)
                 # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    # for stat in ['mean', 'median']:
-    #     aggregate_results('results', combined_with=stat)
+    for stat in ['mean', 'median']:
+        print('Aggregated with ', stat)
+
+        for table, name in zip(aggregate_results('results', combined_with=stat),
+                               ['near best', 'rank', 'distance', 'nans']):
+            print(name)
+            print(table.to_latex(float_format="%.4f"))
         # better_methods('double', 'results', stat)
 
     # better_methods_repetition_level('double', 'results_wide_nans')
