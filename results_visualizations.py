@@ -193,7 +193,7 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
                 # a povprečit a vzet samo enega od B-jev za ostale metode?
                 pass
             else:
-                for B in [10, 100, 1000]:
+                for B in [1000]:
                     df_part = df[(df['B'] == B) & (df['statistic'] == statistic)]
 
                     if additional == 'hierarchical':
@@ -370,6 +370,8 @@ def aggregate_results(result_folder, methods=None, combined_with='mean'):
     nans_all = results[['method', 'nans', 'statistic', 'repetitions', 'dgp', 'n']].groupby(['method', 'statistic',
                                                                                             'dgp', 'n']).mean()
     nans_all = nans_all[nans_all['nans'] > 0]['nans'].sort_values(ascending=False)
+
+    # t = results[results['method'].isin(['double', 'standard'])] for finding experiment for histogram
 
     return near_best, avg_rank, dist_table, nans_all
 
@@ -692,11 +694,7 @@ if __name__ == '__main__':
     cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, levels=[2, 3],
-                         stds=[0.1, 1, 10], set_ylim=True)
-
-    # for c in compare_variances():
-    #     print(c)
+    main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, set_ylim=True)
 
     for stat in [np.mean, np.median]:
         for only_bts in [True, False]:
@@ -706,7 +704,7 @@ if __name__ == '__main__':
                 # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
     # for stat in ['mean', 'median']:
-    #     aggregate_results('results', combined_with=stat)
+    #     aggregate_results('results' + folder_add, combined_with=stat)
         # better_methods('double', 'results', stat)
 
     # better_methods_repetition_level('double', 'results_wide_nans')
