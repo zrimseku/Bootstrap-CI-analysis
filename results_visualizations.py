@@ -296,7 +296,7 @@ def aggregate_results(result_folder, methods=None, combined_with='mean'):
     results['abs_difference'] = abs(results['difference'])
     min_distances = results[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n']]\
         .sort_values('abs_difference').groupby(['alpha', 'dgp', 'statistic', 'n']).first()
-    results['min_distances'] = results.apply(
+    results['min_difference'] = results.apply(
         lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['abs_difference'], axis=1)
     results['best_coverage'] = results.apply(
         lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['coverage'], axis=1)
@@ -386,7 +386,7 @@ def better_methods(method, result_folder, combined_with='mean'):
     results['abs_difference'] = abs(results['difference'])
     min_distances = results[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n']] \
         .sort_values('abs_difference').groupby(['alpha', 'dgp', 'statistic', 'n']).first()
-    results['min_distances'] = results.apply(
+    results['min_difference'] = results.apply(
         lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['abs_difference'], axis=1)
     results['best_coverage'] = results.apply(
         lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['coverage'], axis=1)
@@ -563,7 +563,7 @@ def average_distances_long(folder, combine_dist=np.mean):
         avg_distances.loc[i] = [*experiment, avg_dist, std, nans[experiment] / experiment[-1]]
 
     # normalization of distances based on the best method
-    avg_distances['avg_distance'] = avg_distances[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
+    avg_distances['norm_distance'] = avg_distances[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
 
     avg_distances.to_csv(f'{folder}/avg_abs_distances_long_{combine_dist.__name__}.csv', index=False)
@@ -644,10 +644,13 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
                                 nans[experiment] / experiment[-1]]
 
     # normalization of distances based on the best method
+    results['min_distance'] = results['avg_distance']
+    results['min_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'min_distance']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x.min())
     results['avg_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
 
-    results.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}{["", "_bts"][int(only_bts)]}'
+    results.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}_wthmin_{["", "_bts"][int(only_bts)]}'
                    f'{["", "_withnans"][int(include_nan_repetitions)]}.csv', index=False)
     return results
 
@@ -687,26 +690,26 @@ def combine_results(combine_dist='mean', only_bts=True):
 if __name__ == '__main__':
     # folder_add = '_hierarchical'
     # folder_add = '_10000_reps'
-    folder_add = ''
+    folder_add = '_final'
     subfolder = ''
     # additional = 'hierarchical'
     additional = ''
     cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
-    main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, set_ylim=True)
+    # main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, set_ylim=True)
 
-    # for stat in [np.mean, np.median]:
-    #     for only_bts in [True, False]:
-    #         for include_nans in [True, False]:
-    #             results_from_intervals('results', combine_dist=stat, only_bts=only_bts,
-    #                                    include_nan_repetitions=include_nans)
+    for stat in [np.mean, np.median]:
+        for only_bts in [False]:
+            for include_nans in [True]:
+                results_from_intervals('results', combine_dist=stat, only_bts=only_bts,
+                                       include_nan_repetitions=include_nans)
                 # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
     for stat in ['mean', 'median']:
         print('Aggregated with ', stat)
 
-        for table, name in zip(aggregate_results('results', combined_with=stat),
+        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat),
                                ['near best', 'rank', 'distance', 'nans']):
             print(name)
             print(table.to_latex(float_format="%.4f"))
