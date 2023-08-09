@@ -647,7 +647,7 @@ def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions
     results['min_distance'] = results['avg_distance']
     results['min_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'min_distance']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x.min())
-    results['avg_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
+    results['norm_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
 
     results.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}_wthmin_{["", "_bts"][int(only_bts)]}'
@@ -690,7 +690,7 @@ def combine_results(combine_dist='mean', only_bts=True):
 if __name__ == '__main__':
     # folder_add = '_hierarchical'
     # folder_add = '_10000_reps'
-    folder_add = '_final'
+    folder_add = ''
     subfolder = ''
     # additional = 'hierarchical'
     additional = ''
@@ -706,13 +706,13 @@ if __name__ == '__main__':
                                        include_nan_repetitions=include_nans)
                 # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    for stat in ['mean', 'median']:
-        print('Aggregated with ', stat)
-
-        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat),
-                               ['near best', 'rank', 'distance', 'nans']):
-            print(name)
-            print(table.to_latex(float_format="%.4f"))
+    # for stat in ['mean', 'median']:
+    #     print('Aggregated with ', stat)
+    #
+    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat),
+    #                            ['near best', 'rank', 'distance', 'nans']):
+    #         print(name)
+    #         print(table.to_latex(float_format="%.4f"))
 
         # better_methods('double', 'results', stat)
 
