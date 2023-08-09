@@ -279,17 +279,18 @@ def compare_variances():
     return res_int, res_cov
 
 
-def aggregate_results(result_folder, methods=None, combined_with='mean'):
+def aggregate_results(result_folder, methods=None, combined_with='mean', withnans=True, onlybts=True):
     # reading and filtering coverage table
-    results = pd.read_csv(f'{result_folder}/results_from_intervals_{combined_with}_bts.csv')    # changed for only wide!
+    results = pd.read_csv(f'{result_folder}/results_from_intervals_{combined_with}{["", "_bts"][int(onlybts)]}'
+                          f'{["", "_withnans"][int(withnans)]}.csv')
 
-    print('SPEARMAN', results[results['method'] == 'ci_corr_spearman'].shape)
     # coverage = coverage[coverage['B'] == 1000]
     # coverage = coverage[~coverage['dgp'].isin(['DGPBernoulli_0.5', 'DGPBernoulli_0.95'])]
     #                       (coverage['statistic'].isin(['median', 'percentile_5', 'percentile_95'])))]
-    if methods is None:
-        methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
-    results = results[results['method'].isin(methods)]
+    if onlybts:
+        if methods is None:
+            methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
+        results = results[results['method'].isin(methods)]
 
     # calculations for table of closeness to the best method
     results['difference'] = results['coverage'] - results['alpha']
@@ -350,6 +351,10 @@ def aggregate_results(result_folder, methods=None, combined_with='mean'):
     nans_stat.columns = nans_stat.columns.droplevel()
     nans = nans.join(nans_stat)
 
+    nans_a = results[['method', 'nans', 'alpha']].groupby(['method', 'alpha']).mean().unstack()
+    nans_a.columns = nans_a.columns.droplevel()
+    nans = nans.join(nans_a)
+
     nans = nans[nans['nans'] > 0].sort_values(by='nans', ascending=False)
 
     # normalization
@@ -367,8 +372,9 @@ def aggregate_results(result_folder, methods=None, combined_with='mean'):
     # rank diff -> mean, median, kok kerih eksperimentov jih je med tistimi k majo > n razliko
 
     # gather all nans
-    nans_all = results[['method', 'nans', 'statistic', 'repetitions', 'dgp', 'n']].groupby(['method', 'statistic',
-                                                                                            'dgp', 'n']).mean()
+    nans_all = results[results['method'] == 'ci_quant_nonparam'][['method', 'nans', 'statistic', 'repetitions',
+                                                                  'n', 'alpha']].groupby(['method', 'statistic',
+                                                                                   'n', 'alpha']).mean()
     nans_all = nans_all[nans_all['nans'] > 0]['nans'].sort_values(ascending=False)
 
     # t = results[results['method'].isin(['double', 'standard'])] for finding experiment for histogram
@@ -376,10 +382,12 @@ def aggregate_results(result_folder, methods=None, combined_with='mean'):
     return near_best, avg_rank, dist_table, nans_all
 
 
-def better_methods(method, result_folder, combined_with='mean'):
+def better_methods(method, result_folder, combined_with='mean', withnans=True, onlybts=True):
     """Finds better methods than proposed one - on experiment level."""
     # reading and filtering coverage table
-    results = pd.read_csv(f'{result_folder}/results_combined_{combined_with}.csv')
+    # results = pd.read_csv(f'{result_folder}/results_combined_{combined_with}.csv')
+    results = pd.read_csv(f'{result_folder}/results_from_intervals_{combined_with}{["", "_bts"][int(onlybts)]}'
+                          f'{["", "_withnans"][int(withnans)]}.csv')
 
     # calculations for table of (coverage) closeness to the best method
     results['difference'] = results['coverage'] - results['alpha']
@@ -489,6 +497,7 @@ def better_methods_repetition_level(method, results_folder, combined_with='mean'
     combined['better_dist'] = combined.apply(better_dist_apply_repetitions, axis=1, intervals=intervals, method=method)
     # combined['better_cov'] = combined.apply(better_cov_apply_repetitions, axis=1, intervals=intervals, method=method)
     combined = combined[combined['method'] != method]       # no point in comparing method with itself
+    # TODO
     return
 
 
@@ -699,30 +708,29 @@ if __name__ == '__main__':
 
     # main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, set_ylim=True)
 
-    for stat in [np.mean, np.median]:
-        for only_bts in [False]:
-            for include_nans in [True]:
-                results_from_intervals('results', combine_dist=stat, only_bts=only_bts,
-                                       include_nan_repetitions=include_nans)
+    # for stat in [np.mean, np.median]:
+    #     for only_bts in [False]:
+    #         for include_nans in [True]:
+    #             results_from_intervals('results', combine_dist=stat, only_bts=only_bts,
+    #                                    include_nan_repetitions=include_nans)
                 # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    # for stat in ['mean', 'median']:
-    #     print('Aggregated with ', stat)
-    #
-    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat),
-    #                            ['near best', 'rank', 'distance', 'nans']):
-    #         print(name)
-    #         print(table.to_latex(float_format="%.4f"))
+    for stat in ['mean', 'median']:
+        print('Aggregated with ', stat)
 
-        # better_methods('double', 'results', stat)
+        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+                                                 onlybts=False),
+                               ['near best', 'rank', 'distance', 'nans']):
+            print(name)
+            print(table.to_latex(float_format="%.2f"))
+
+
+        # print('BETTER:')
+        # cov_bet, dist_bet = better_methods('double', f'results{folder_add}', combined_with=stat, withnans=True,
+        #                                    onlybts=True)
+        # print(cov_bet.to_latex(float_format="%.2f"))
 
     # better_methods_repetition_level('double', 'results_wide_nans')
 
-    # result_folder = 'results_10000_reps'
-    # method = 'double'
-    #
-    # td = better_methods(method, result_folder)
-    #
-    # nb, ar, ad, na = aggregate_results('results_10000_reps')
-    # debug = True
+
 
