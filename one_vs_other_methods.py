@@ -69,6 +69,15 @@ def analyze_coverage(coverage_m1, coverage_m2, target_coverage):
     }
 
 
+def analyze_coverage_m1_false(coverage_m2, true_coverage):
+    coverage_m1 = np.array([False] * len(coverage_m2))
+    result = analyze_coverage(coverage_m1, coverage_m2, true_coverage)
+    result.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
+                   'errordiff_mu': np.nan, 'errordiff_q005': np.nan, 'errordiff_q095': np.nan,
+                   'better_cov_prob': np.nan})
+    return result
+
+
 def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
                   reps=10000):
     if one_sided is None:
@@ -77,54 +86,56 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
         two_sided = [0.5, 0.9, 0.95]
     results_df = pd.read_csv(f'{result_folder}/intervals.csv')
 
+    # choosing only results for certain B and repetitions
     results_df = results_df.loc[(results_df['B'] == B) &
                                 (results_df['repetitions'] == reps)].drop(columns=['B', 'repetitions'])
 
+    # selecting correct methods for comparison for each statistic
+    compare_to = {}
+    for statistic in results_df['statistic'].unique():
+        stat_cols = results_df[results_df['statistic'] == statistic].dropna(axis=1, how='all').columns.tolist()
+        if other_methods is None:
+            compare_to[statistic] = [m for m in stat_cols if m not in [method_one, 'dgp', 'statistic', 'n', 'alpha',
+                                                                       'true_value', 'exact']]
+        else:
+            compare_to[statistic] = [m for m in other_methods if m in stat_cols]
+
+    # division of results by experiments, calculating coverage and length/distance
     results_better1 = []
     results_better2 = []
 
     for [dgp, stat, n], df in results_df.groupby(['dgp', 'statistic', 'n']):
 
-        print(str([dgp, stat, n]))
-
-        df = df.dropna(axis=1, how='all')
-
-        if other_methods is None:
-            compare_to = [m for m in df.columns.tolist() if m not in [method_one, 'dgp', 'statistic', 'n', 'alpha',
-                                                                      'true_value', 'exact']]
-        else:
-            compare_to = [m for m in other_methods if m in df.columns.tolist()]
-
+        # one-sided intervals
         for alpha in one_sided:
             df_a = df.loc[df['alpha'] == alpha].drop(columns='alpha')
+            if (dgp == 'DGPNorm_0_1') & (alpha == 0.025) & (stat == 'mean') & (n == 4):
+                stop = True
 
-            if method_one not in df_a.columns:
+            if df_a[method_one].isna().all():      # if method_one was unable to give any predictions
 
-                for m2 in compare_to:
-
+                # compare to all other methods for this statistic
+                for m2 in compare_to[stat]:
                     exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
 
-                    if m2 not in df_a.columns:
+                    if df_a[m2].isna().all():      # if m2 was unable to give any predictions
                         exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
                                          'coverage_m2_mu': -1, 'coverage_m2_q005': -1, 'coverage_m2_q095': -1})
 
-                    else:
+                    else:                               # m2 gave some predictions (TODO do we want to know how many?)
                         covers_m2 = (df_a[m2] > df_a['true_value']).values
-                        covers_m1 = np.array([False] * len(covers_m2))
-                        res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
-                        res_cov.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
-                                         'errordiff_mu': np.nan, 'errordiff_q005': np.nan, 'errordiff_q095': np.nan,
-                                         'better_cov_prob': np.nan})
+                        res_cov = analyze_coverage_m1_false(covers_m2, alpha)
                         exp_dict.update(res_cov)
 
                     results_better1.append(exp_dict)
 
-            else:
+            else:                                       # method_one gave some predictions for this experiment
 
                 covers_m1 = (df_a[method_one] > df_a['true_value']).values
                 distance_m1 = abs(df_a[method_one] - df_a['exact']).values
 
-                for m2 in compare_to:
+                for m2 in compare_to[stat]:             # compare to all other methods
+                    # TODO do we want to separate  those without predictions?
                     covers_m2 = (df_a[m2] > df_a['true_value']).values
                     distance_m2 = abs(df_a[m2] - df_a['exact']).values
 
@@ -137,43 +148,40 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
                     results_better1.append(exp_dict)
 
-        print('Finished onesided')
-
+        # two-sided intervals
         for alpha in two_sided:
             au = 0.5 + alpha / 2
             al = round(0.5 - alpha / 2., 10)
 
+            # two tables for lower and upper bounds
             df_al = df.loc[df['alpha'] == al].drop(columns='alpha')
             df_au = df.loc[df['alpha'] == au].drop(columns='alpha')
 
-            if method_one not in df_al.columns or 'double' not in df_au.columns:
+            # method_one didn't give any predictions for lower or any for upper bound
+            if df_al[method_one].isna().all() or df_au[method_one].isna().all():
 
-                for m2 in compare_to:
-
+                for m2 in compare_to[stat]:                 # compare to all other methods
                     exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
 
-                    if m2 not in df_al.columns or m2 not in df_au.columns:
+                    if np.all(df_al[m2] == np.nan) or np.all(df_au[m2] == np.nan):      # m2 gave no predictions
                         exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
                                          'coverage_m2_mu': -1, 'coverage_m2_q005': -1, 'coverage_m2_q095': -1})
 
-                    else:
+                    else:                                   # m2 gave some predictions
                         covers_m2 = (df_au[m2] > df_au['true_value']).values & (df_al[m2] < df_al['true_value']).values
-                        covers_m1 = np.array([False] * len(covers_m2))
-                        res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
-                        res_cov.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
-                                        'errordiff_mu': np.nan, 'errordiff_q005': np.nan, 'errordiff_q095': np.nan,
-                                        'better_cov_prob': np.nan})
+
+                        res_cov = analyze_coverage_m1_false(covers_m2, alpha)
                         exp_dict.update(res_cov)
 
                     results_better2.append(exp_dict)
 
-            else:
+            else:                                           # method one gave some predictions
 
                 covers_m1 = (df_au[method_one] > df_au['true_value']).values & \
                             (df_al[method_one] < df_al['true_value']).values
                 length_m1 = df_au[method_one].values - df_al[method_one].values
 
-                for m2 in compare_to:
+                for m2 in compare_to[stat]:                 # compare to all other methods (TODO check predictions?)
                     covers_m2 = (df_au[m2] > df_au['true_value']).values & (df_al[m2] < df_al['true_value']).values
                     length_m2 = df_au[m2].values - df_al[m2].values
 
@@ -186,8 +194,6 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
                     results_better2.append(exp_dict)
 
-        print('finished ' + str([dgp, stat, n]))
-
     final_df1 = pd.DataFrame(results_better1)
     final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}.csv', index=False)
 
@@ -198,92 +204,3 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 one_vs_others('double', B=1000, reps=10000)
 one_vs_others('bca', B=1000, reps=10000)
 
-
-# import pystan
-
-# TOY DATASET
-# def m_asymptotic(x, alpha):
-#     mu = np.mean(x)
-#     delta = sp.stats.t.ppf(1.0 - alpha / 2, len(x) - 1) * np.std(x, ddof=1) / np.sqrt(len(x))
-#     return {'lb': mu - delta, 'ub': mu + delta}
-#
-#
-# def m_classic(x, alpha):
-#     res = sp.stats.t.interval(1.0 - alpha, len(x) - 1, loc=np.mean(x), scale=np.std(x, ddof=1) / np.sqrt(len(x)))
-#     return {'lb': res[0], 'ub': res[1]}
-#
-#
-# def m_bootstrap(x, alpha):
-#     n_boot = 1000
-#     boot_means = np.array([np.mean(np.random.choice(x, size=len(x))) for _ in range(n_boot)])
-#     lb = np.percentile(boot_means, alpha / 2 * 100)
-#     ub = np.percentile(boot_means, (1 - alpha / 2) * 100)
-#     return {'lb': lb, 'ub': ub}
-#
-#
-# # Prepare toy dataset
-# np.random.seed(0)
-# n_rep = 1000
-# n = 8
-# alpha = 0.05
-#
-# res = []
-# for i in range(1, n_rep + 1):
-#     x = np.random.normal(size=n)
-#
-#     ciA = m_bootstrap(x, alpha)
-#     ciB = m_classic(x, alpha)
-#
-#     new_row = {
-#         'id': i,
-#         'lb_A': ciA['lb'], 'ub_A': ciA['ub'],
-#         'lb_B': ciB['lb'], 'ub_B': ciB['ub']
-#     }
-#
-#     res.append(new_row)
-#
-# # Compute interval coverage and length
-# res_df = pd.DataFrame(res)
-# res_df['lengthA'] = res_df['ub_A'] - res_df['lb_A']
-# res_df['lengthB'] = res_df['ub_B'] - res_df['lb_B']
-# # res_df['coverageA'] = np.where((res_df['ub_A'] >= 0) & (res_df['lb_A'] <= 0), 1, 0)
-# # res_df['coverageB'] = np.where((res_df['ub_B'] >= 0) & (res_df['lb_B'] <= 0), 1, 0)
-# res_df['coverageA'] = sp.stats.bernoulli.rvs(p=0.95, size=len(res_df['ub_A']))
-# res_df['coverageB'] = sp.stats.bernoulli.rvs(p=0.93, size=len(res_df['ub_A']))
-
-# def analyze_coverage_stan(coverageA, coverageB, target_coverage):
-#     y = np.full(len(coverageA), -1)
-#
-#     y[~coverageA & ~coverageB] = 1
-#     y[coverageA & ~coverageB] = 2
-#     y[~coverageA & coverageB] = 3
-#     y[coverageA & coverageB] = 4
-#
-#     model = pystan.StanModel(file="./stan/analyze_coverage.stan")
-#     stan_data = {'n': len(y), 'x': y, 'target_coverage': target_coverage}
-#     fit = model.sampling(data=stan_data, chains=1, iter=10000, warmup=500, refresh=0)
-#     smp = pd.DataFrame(fit.extract())
-#
-#     result = {
-#         'coverageA_mu': np.mean(smp['coverageA']),
-#         'coverageA_q005': np.quantile(smp['coverageA'], 0.05),
-#         'coverageA_q095': np.quantile(smp['coverageA'], 0.95),
-#         'coverageB_mu': np.mean(smp['coverageB']),
-#         'coverageB_q005': np.quantile(smp['coverageB'], 0.05),
-#         'coverageB_q095': np.quantile(smp['coverageB'], 0.95),
-#         'errordiff_mu': np.mean(smp['error_diff']),
-#         'errordiff_q005': np.quantile(smp['error_diff'], 0.05),
-#         'errordiff_q095': np.quantile(smp['error_diff'], 0.95),
-#         'A_is_better_prob': np.mean(smp['error_diff'] < 0)
-#     }
-#
-#     return result
-#
-# # Analyze lengths
-# length_result = analyze_length(res_df['lengthA'], res_df['lengthB'])
-# print("Length Analysis:", length_result)
-#
-# # Analyze coverages
-# target_coverage = 0.95
-# coverage_result = analyze_coverage(res_df['coverageA'], res_df['coverageB'], target_coverage)
-# print("Coverage Analysis:", coverage_result)
