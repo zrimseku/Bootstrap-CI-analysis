@@ -8,12 +8,12 @@ def analyze_length(lengthA, lengthB, len_dist='ld'):
 
     diff = lengthA - lengthB
     diff_mu = np.mean(diff)
-    diff_se = np.std(diff) / np.sqrt(len(lengthA))
+    diff_se = 0 if np.all(diff == diff[0]) else np.std(diff) / np.sqrt(len(lengthA))
     diff_is_neg_prob = sp.stats.norm.cdf(0, diff_mu, diff_se)
 
-    normalized = (lengthA - lengthB) / lengthA
+    normalized = (lengthA - lengthB) / (lengthA + 0.0001)       # TODO is this ok??
     norm_mu = np.mean(normalized)
-    norm_se = np.std(normalized) / np.sqrt(len(lengthA))
+    norm_se = 0 if np.all(normalized == normalized[0]) else np.std(normalized) / np.sqrt(len(lengthA))
 
     norm_is_neg_prob = 0 if norm_se == 0 else sp.stats.norm.cdf(0, norm_mu, norm_se)
 
@@ -37,6 +37,12 @@ def analyze_coverage(coverage_m1, coverage_m2, target_coverage):
     y[1] = np.sum((coverage_m1 == 1) & (coverage_m2 == 0))
     y[2] = np.sum((coverage_m1 == 0) & (coverage_m2 == 1))
     y[3] = np.sum((coverage_m1 == 1) & (coverage_m2 == 1))
+
+    if sum(y) != len(coverage_m1):
+        if sum(y) + np.sum(coverage_m1 == np.nan) + np.sum(coverage_m2 == np.nan) != len(coverage_m1):
+            print('missing cases in y!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        else:
+            print('missing cases because of nans.')
 
     alpha = y + 0.0001
     p = sp.stats.dirichlet.rvs(alpha, size=10000)
@@ -79,6 +85,8 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
     for [dgp, stat, n], df in results_df.groupby(['dgp', 'statistic', 'n']):
 
+        print(str([dgp, stat, n]))
+
         df = df.dropna(axis=1, how='all')
 
         if other_methods is None:
@@ -90,21 +98,46 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
         for alpha in one_sided:
             df_a = df.loc[df['alpha'] == alpha].drop(columns='alpha')
 
-            covers_m1 = (df_a[method_one] > df_a['true_value']).values
-            distance_m1 = abs(df_a[method_one] - df_a['exact']).values
+            if method_one not in df_a.columns:
 
-            for m2 in compare_to:
-                covers_m2 = (df_a[m2] > df_a['true_value']).values
-                distance_m2 = abs(df_a[m2] - df_a['exact']).values
+                for m2 in compare_to:
 
-                res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
-                res_dist = analyze_length(distance_m1, distance_m2, 'dist')
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
 
-                exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
-                exp_dict.update(res_cov)
-                exp_dict.update(res_dist)
+                    if m2 not in df_a.columns:
+                        exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
+                                         'coverage_m2_mu': -1, 'coverage_m2_q005': -1, 'coverage_m2_q095': -1})
 
-                results_better1.append(exp_dict)
+                    else:
+                        covers_m2 = (df_a[m2] > df_a['true_value']).values
+                        covers_m1 = np.array([False] * len(covers_m2))
+                        res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
+                        res_cov.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
+                                         'errordiff_mu': np.nan, 'errordiff_q005': np.nan, 'errordiff_q095': np.nan,
+                                         'better_cov_prob': np.nan})
+                        exp_dict.update(res_cov)
+
+                    results_better1.append(exp_dict)
+
+            else:
+
+                covers_m1 = (df_a[method_one] > df_a['true_value']).values
+                distance_m1 = abs(df_a[method_one] - df_a['exact']).values
+
+                for m2 in compare_to:
+                    covers_m2 = (df_a[m2] > df_a['true_value']).values
+                    distance_m2 = abs(df_a[m2] - df_a['exact']).values
+
+                    res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
+                    res_dist = analyze_length(distance_m1, distance_m2, 'dist')
+
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
+                    exp_dict.update(res_cov)
+                    exp_dict.update(res_dist)
+
+                    results_better1.append(exp_dict)
+
+        print('Finished onesided')
 
         for alpha in two_sided:
             au = 0.5 + alpha / 2
@@ -113,21 +146,47 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
             df_al = df.loc[df['alpha'] == al].drop(columns='alpha')
             df_au = df.loc[df['alpha'] == au].drop(columns='alpha')
 
-            covers_m1 = (df_au[method_one] > df_au['true_value']).values & (df_al[method_one] < df_al['true_value']).values
-            length_m1 = df_au[method_one].values - df_al[method_one].values
+            if method_one not in df_al.columns or 'double' not in df_au.columns:
 
-            for m2 in compare_to:
-                covers_m2 = (df_au[m2] > df_au['true_value']).values & (df_al[m2] < df_al['true_value']).values
-                length_m2 = df_au[m2].values - df_al[m2].values
+                for m2 in compare_to:
 
-                res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
-                res_len = analyze_length(length_m1, length_m2, 'len')
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
 
-                exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
-                exp_dict.update(res_cov)
-                exp_dict.update(res_len)
+                    if m2 not in df_al.columns or m2 not in df_au.columns:
+                        exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
+                                         'coverage_m2_mu': -1, 'coverage_m2_q005': -1, 'coverage_m2_q095': -1})
 
-                results_better2.append(exp_dict)
+                    else:
+                        covers_m2 = (df_au[m2] > df_au['true_value']).values & (df_al[m2] < df_al['true_value']).values
+                        covers_m1 = np.array([False] * len(covers_m2))
+                        res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
+                        res_cov.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
+                                        'errordiff_mu': np.nan, 'errordiff_q005': np.nan, 'errordiff_q095': np.nan,
+                                        'better_cov_prob': np.nan})
+                        exp_dict.update(res_cov)
+
+                    results_better2.append(exp_dict)
+
+            else:
+
+                covers_m1 = (df_au[method_one] > df_au['true_value']).values & \
+                            (df_al[method_one] < df_al['true_value']).values
+                length_m1 = df_au[method_one].values - df_al[method_one].values
+
+                for m2 in compare_to:
+                    covers_m2 = (df_au[m2] > df_au['true_value']).values & (df_al[m2] < df_al['true_value']).values
+                    length_m2 = df_au[m2].values - df_al[m2].values
+
+                    res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
+                    res_len = analyze_length(length_m1, length_m2, 'len')
+
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
+                    exp_dict.update(res_cov)
+                    exp_dict.update(res_len)
+
+                    results_better2.append(exp_dict)
+
+        print('finished ' + str([dgp, stat, n]))
 
     final_df1 = pd.DataFrame(results_better1)
     final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}.csv', index=False)
@@ -136,9 +195,8 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
     final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}.csv', index=False)
 
 
-
-one_vs_others('double', B=100, reps=100)
-one_vs_others('bca', B=100, reps=100)
+one_vs_others('double', B=1000, reps=10000)
+one_vs_others('bca', B=1000, reps=10000)
 
 
 # import pystan
