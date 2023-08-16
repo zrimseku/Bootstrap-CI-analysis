@@ -224,23 +224,28 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
 
 def plot_times_line():
     df = pd.read_csv(f'results/times.csv')
+    for stat in ['mean', 'median', 'std', 'percentile_5', 'percentile_95', 'corr']:
+        filter_by = {'B': [1000], 'statistic': [stat]}
+        df_part = df.copy()
+        for key in filter_by.keys():
+            df_part = df_part[df_part[key].isin(filter_by[key])]
+            df_part[key] = np.nan
+        df_na = df_part.dropna(axis=1, how='all')
 
-    filter_by = {'B': [100], 'statistic': ['mean']}
-    for key in filter_by.keys():
-        df = df[df[key].isin(filter_by[key])]
-        df[key] = np.nan
-    df = df.dropna(axis=1, how='all')
+        id_vars = [var for var in ['dgp', 'statistic', 'n', 'B', 'repetitions'] if var not in filter_by.keys()]
+        df_long = pd.melt(df_na, id_vars=id_vars, value_name='t', var_name='method')  #.dropna()
 
-    id_vars = [var for var in ['dgp', 'statistic', 'n', 'B', 'repetitions'] if var not in filter_by.keys()]
-    df_long = pd.melt(df, id_vars=id_vars, value_name='t', var_name='method')  #.dropna()
+        sns.lineplot(data=df_long, x='n', hue='method', y='t', ci=95)  # errorbar=('ci', 95)), ci is deprecated
 
-    sns.lineplot(data=df_long, x='n', hue='method', y='t', ci=95)  # errorbar=('ci', 95)), ci is deprecated
-
-    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.title('Times of CI calculation')
-    plt.tight_layout()
-    plt.savefig(f'images/comparison/times_line.png')
-    plt.close()
+        plt.xscale('log', base=2)
+        xt = sorted(df_long['n'].unique())
+        plt.xticks(xt, labels=[str(x) for x in xt])
+        plt.yscale('log')
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.title(f'Times of CI calculation for {stat}')
+        plt.tight_layout()
+        plt.savefig(f'images/comparison/times_line_{stat}_ylog10.png')
+        plt.close()
 
 
 def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=None, save_add=None, scale='linear',
