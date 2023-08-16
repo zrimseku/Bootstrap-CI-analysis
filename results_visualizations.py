@@ -222,6 +222,27 @@ def main_plot_comparison(B_as_method=False, filter_by={}, additional='', scale='
         del df      # clear space
 
 
+def plot_times_line():
+    df = pd.read_csv(f'results/times.csv')
+
+    filter_by = {'B': [100], 'statistic': ['mean']}
+    for key in filter_by.keys():
+        df = df[df[key].isin(filter_by[key])]
+        df[key] = np.nan
+    df = df.dropna(axis=1, how='all')
+
+    id_vars = [var for var in ['dgp', 'statistic', 'n', 'B', 'repetitions'] if var not in filter_by.keys()]
+    df_long = pd.melt(df, id_vars=id_vars, value_name='t', var_name='method')  #.dropna()
+
+    sns.lineplot(data=df_long, x='n', hue='method', y='t', ci=95)  # errorbar=('ci', 95)), ci is deprecated
+
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.title('Times of CI calculation')
+    plt.tight_layout()
+    plt.savefig(f'images/comparison/times_line.png')
+    plt.close()
+
+
 def plot_times_lengths_grid(comparing='times', filter_by: dict = None, title=None, save_add=None, scale='linear',
                             ci=95, folder_add='', subfolder=''):
     df = pd.read_csv(f'results{folder_add}/{comparing}.csv')
@@ -715,14 +736,14 @@ if __name__ == '__main__':
     #                                    include_nan_repetitions=include_nans)
                 # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    for stat in ['mean', 'median']:
-        print('Aggregated with ', stat)
-
-        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
-                                                 onlybts=False),
-                               ['near best', 'rank', 'distance', 'nans']):
-            print(name)
-            print(table.to_latex(float_format="%.2f"))
+    # for stat in ['mean', 'median']:
+    #     print('Aggregated with ', stat)
+    #
+    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+    #                                              onlybts=False),
+    #                            ['near best', 'rank', 'distance', 'nans']):
+    #         print(name)
+    #         print(table.to_latex(float_format="%.2f"))
 
 
         # print('BETTER:')
@@ -731,6 +752,8 @@ if __name__ == '__main__':
         # print(cov_bet.to_latex(float_format="%.2f"))
 
     # better_methods_repetition_level('double', 'results_wide_nans')
+
+    plot_times_line()
 
 
 
