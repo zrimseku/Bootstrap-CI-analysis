@@ -112,16 +112,23 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
         # one-sided intervals
         for alpha in one_sided:
             df_a = df.loc[df['alpha'] == alpha].drop(columns='alpha')
-            if (dgp == 'DGPNorm_0_1') & (alpha == 0.025) & (stat == 'mean') & (n == 4):
-                stop = True
 
-            if df_a[method_one].isna().all():      # if method_one was unable to give any predictions
+            # we will save percentage of times that a method is unable to give predictions
+            nans1 = df_a[method_one].isna().mean()
+
+            if (dgp == 'DGPNorm_0_1') & (alpha == 0.025) & (stat == 'mean') & (n == 4):
+                stop = True     # TODO delete (just for testing)
+
+            if nans1 == 1:      # if method_one was unable to give any predictions
 
                 # compare to all other methods for this statistic
                 for m2 in compare_to[stat]:
-                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
+                    nans2 = df_a[m2].isna().mean()
 
-                    if df_a[m2].isna().all():      # if m2 was unable to give any predictions
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n, 'nan_perc1': nans1,
+                                'nan_perc2': nans2}
+
+                    if nans2 == 1:      # if m2 was unable to give any predictions
                         exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
                                          'coverage_m2_mu': -1, 'coverage_m2_q025': -1, 'coverage_m2_q975': -1})
 
@@ -145,7 +152,10 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                     res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
                     res_dist = analyze_length(distance_m1, distance_m2, 'dist')
 
-                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
+                    nans2 = df_a[m2].isna().mean()
+
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n, 'nan_perc1': nans1,
+                                'nan_perc2': nans2}
                     exp_dict.update(res_cov)
                     exp_dict.update(res_dist)
 
@@ -160,13 +170,20 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
             df_al = df.loc[df['alpha'] == al].drop(columns='alpha')
             df_au = df.loc[df['alpha'] == au].drop(columns='alpha')
 
+            # we will save if the method was unable to give any predictions in this experiment
+            has_nans1 = df_al[method_one].isna().any() or df_au[method_one].isna().any()
+
             # method_one didn't give any predictions for lower or any for upper bound
             if df_al[method_one].isna().all() or df_au[method_one].isna().all():
 
                 for m2 in compare_to[stat]:                 # compare to all other methods
-                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
 
-                    if np.all(df_al[m2] == np.nan) or np.all(df_au[m2] == np.nan):      # m2 gave no predictions
+                    has_nans2 = df_al[m2].isna().any() or df_au[m2].isna().any()
+
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n,
+                                'has_nans_m1': has_nans1, 'has_nans_m2': has_nans2}
+
+                    if df_al[m2].isna().all() or df_au[m2].isna().all():      # m2 gave no predictions
                         exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
                                          'coverage_m2_mu': -1, 'coverage_m2_q025': -1, 'coverage_m2_q975': -1})
 
@@ -191,7 +208,10 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                     res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
                     res_len = analyze_length(length_m1, length_m2, 'len')
 
-                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
+                    has_nans2 = df_al[m2].isna().any() or df_au[m2].isna().any()
+
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n,
+                                'has_nans_m1': has_nans1, 'has_nans_m2': has_nans2}
                     exp_dict.update(res_cov)
                     exp_dict.update(res_len)
 
