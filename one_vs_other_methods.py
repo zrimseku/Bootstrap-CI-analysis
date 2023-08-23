@@ -4,7 +4,7 @@ import pandas as pd
 
 
 def analyze_length(lengthA, lengthB, len_dist='ld'):
-    # compares length of two sided intervals or distance to exact intervals (input absolute distances)
+    """Compares length of two sided intervals or distance to exact intervals (input absolute distances)"""
 
     diff = lengthA - lengthB
     diff_mu = np.mean(diff)
@@ -19,12 +19,12 @@ def analyze_length(lengthA, lengthB, len_dist='ld'):
 
     result = {
         'diff_mu': diff_mu,
-        'diff_q005': diff_mu + sp.stats.norm.ppf(0.05) * diff_se,
-        'diff_q095': diff_mu + sp.stats.norm.ppf(0.95) * diff_se,
+        'diff_q025': diff_mu + sp.stats.norm.ppf(0.025) * diff_se,
+        'diff_q975': diff_mu + sp.stats.norm.ppf(0.975) * diff_se,
         f'better_{len_dist}_prob': diff_is_neg_prob,
         'norm_mu': norm_mu,
-        'norm_q005': norm_mu + sp.stats.norm.ppf(0.05) * norm_se,
-        'norm_q095': norm_mu + sp.stats.norm.ppf(0.95) * norm_se,
+        'norm_q025': norm_mu + sp.stats.norm.ppf(0.025) * norm_se,
+        'norm_q975': norm_mu + sp.stats.norm.ppf(0.975) * norm_se,
         f'better_{len_dist}_prob_norm': norm_is_neg_prob
     }
 
@@ -32,6 +32,8 @@ def analyze_length(lengthA, lengthB, len_dist='ld'):
 
 
 def analyze_coverage(coverage_m1, coverage_m2, target_coverage):
+    """Analyzes coverages of both methods. Average and confidence intervals for both, then percentage of times that the
+    first method is better than the second one."""
     y = np.zeros(4)
     y[0] = np.sum((coverage_m1 == 0) & (coverage_m2 == 0))
     y[1] = np.sum((coverage_m1 == 1) & (coverage_m2 == 0))
@@ -57,23 +59,24 @@ def analyze_coverage(coverage_m1, coverage_m2, target_coverage):
 
     return {
         'coverage_m1_mu': np.mean(coverageA),
-        'coverage_m1_q005': np.percentile(coverageA, 5),
-        'coverage_m1_q095': np.percentile(coverageA, 95),
+        'coverage_m1_q025': np.percentile(coverageA, 2.5),
+        'coverage_m1_q975': np.percentile(coverageA, 97.5),
         'coverage_m2_mu': np.mean(coverageB),
-        'coverage_m2_q005': np.percentile(coverageB, 5),
-        'coverage_m2_q095': np.percentile(coverageB, 95),
+        'coverage_m2_q025': np.percentile(coverageB, 2.5),
+        'coverage_m2_q975': np.percentile(coverageB, 97.5),
         'errordiff_mu': np.mean(error_diff),
-        'errordiff_q005': np.percentile(error_diff, 5),
-        'errordiff_q095': np.percentile(error_diff, 95),
+        'errordiff_q025': np.percentile(error_diff, 2.5),
+        'errordiff_q975': np.percentile(error_diff, 97.5),
         'better_cov_prob': np.mean(error_diff <= 0)            # TODO < ali <=
     }
 
 
 def analyze_coverage_m1_false(coverage_m2, true_coverage):
+    """Setting method one to False, if it returns nans, so that we get results for the second method."""
     coverage_m1 = np.array([False] * len(coverage_m2))
     result = analyze_coverage(coverage_m1, coverage_m2, true_coverage)
     result.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
-                   'errordiff_mu': np.nan, 'errordiff_q005': np.nan, 'errordiff_q095': np.nan,
+                   'errordiff_mu': np.nan, 'errordiff_q025': np.nan, 'errordiff_q975': np.nan,
                    'better_cov_prob': np.nan})
     return result
 
@@ -119,8 +122,8 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                     exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
 
                     if df_a[m2].isna().all():      # if m2 was unable to give any predictions
-                        exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
-                                         'coverage_m2_mu': -1, 'coverage_m2_q005': -1, 'coverage_m2_q095': -1})
+                        exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
+                                         'coverage_m2_mu': -1, 'coverage_m2_q025': -1, 'coverage_m2_q975': -1})
 
                     else:                               # m2 gave some predictions (TODO do we want to know how many?)
                         covers_m2 = (df_a[m2] > df_a['true_value']).values
@@ -164,8 +167,8 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                     exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n}
 
                     if np.all(df_al[m2] == np.nan) or np.all(df_au[m2] == np.nan):      # m2 gave no predictions
-                        exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
-                                         'coverage_m2_mu': -1, 'coverage_m2_q005': -1, 'coverage_m2_q095': -1})
+                        exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
+                                         'coverage_m2_mu': -1, 'coverage_m2_q025': -1, 'coverage_m2_q975': -1})
 
                     else:                                   # m2 gave some predictions
                         covers_m2 = (df_au[m2] > df_au['true_value']).values & (df_al[m2] < df_al['true_value']).values
