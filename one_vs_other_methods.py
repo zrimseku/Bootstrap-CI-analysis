@@ -75,7 +75,7 @@ def analyze_coverage_m1_false(coverage_m2, true_coverage):
     """Setting method one to False, if it returns nans, so that we get results for the second method."""
     coverage_m1 = np.array([False] * len(coverage_m2))
     result = analyze_coverage(coverage_m1, coverage_m2, true_coverage)
-    result.update({'coverage_m1_mu': -1, 'coverage_m1_q005': -1, 'coverage_m1_q095': -1,
+    result.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
                    'errordiff_mu': np.nan, 'errordiff_q025': np.nan, 'errordiff_q975': np.nan,
                    'better_cov_prob': np.nan})
     return result
@@ -125,8 +125,8 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                 for m2 in compare_to[stat]:
                     nans2 = df_a[m2].isna().mean()
 
-                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n, 'nan_perc1': nans1,
-                                'nan_perc2': nans2}
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n, 'nan_perc_m1': nans1,
+                                'nan_perc_m2': nans2}
 
                     if nans2 == 1:      # if m2 was unable to give any predictions
                         exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
@@ -154,8 +154,8 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
                     nans2 = df_a[m2].isna().mean()
 
-                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n, 'nan_perc1': nans1,
-                                'nan_perc2': nans2}
+                    exp_dict = {'method': m2, 'alpha': alpha, 'dgp': dgp, 'stat': stat, 'n': n, 'nan_perc_m1': nans1,
+                                'nan_perc_m2': nans2}
                     exp_dict.update(res_cov)
                     exp_dict.update(res_dist)
 
@@ -222,6 +222,24 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
     final_df2 = pd.DataFrame(results_better2)
     final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}.csv', index=False)
+
+
+def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
+                  reps=10000, skip_nans=True):
+    # if one_sided is None:
+    #     one_sided = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
+    # if two_sided is None:
+    #     two_sided = [0.5, 0.9, 0.95]
+    results_df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}.csv')
+
+    df = results_df[results_df['nan_perc_m1'] + results_df['nan_perc_m2'] == 0] if skip_nans else results_df
+
+    # counting ns/methods that occur more than 50%
+    df_bad = df[df['better_cov_prob'] < 0.5]
+    df_bad['method'].value_counts()
+
+    # mean probability by grouping
+    df_mean = df[['stat', 'n', 'method', 'better_cov_prob']].groupby(['stat', 'n', 'method']).mean()        # df_bad?
 
 
 one_vs_others('double', B=1000, reps=10000)
