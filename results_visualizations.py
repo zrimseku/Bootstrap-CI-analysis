@@ -724,54 +724,77 @@ def combine_results(combine_dist='mean', only_bts=True):
 
 def separate_experiment_plots(result_folder='results'):
 
-    # onesided
     coverages = pd.read_csv(f'{result_folder}/coverage.csv')
     distances = pd.read_csv(f'{result_folder}/distance.csv')
-    i = 0
-    for [dgp, stat, alpha], df in distances.groupby(['dgp', 'statistic', 'alpha']):
-        i += 1
-        if i == 3: # TODO Delete
-            break
+    lengths = pd.read_csv(f'{result_folder}/length.csv')
 
-        # plotting coverage
-        cov_df = coverages[(coverages['dgp'] == dgp) & (coverages['statistic'] == stat) & (coverages['alpha'] == alpha)]
-
-        nm = cov_df['method'].nunique()
-        if nm > 10:
-            cols = plt.cm.tab20(np.linspace(0.05, 0.95, cov_df['method'].nunique()))
+    for sided in ['onesided', 'twosided']:
+        i = 0
+        if sided == 'onesided':
+            df_whole = distances
         else:
-            cols = plt.cm.tab10(np.linspace(0.05, 0.95, cov_df['method'].nunique()))
-        colors = {m: c for (m, c) in zip(cov_df['method'].unique(), cols)}
-        ord = cov_df['method'].unique()
+            df_whole = lengths
+            df_whole.rename(columns={'CI': 'alpha'}, inplace=True)
 
-        fig = plt.figure(figsize=(6, 12), constrained_layout=True)
-        txt = fig.suptitle(f"Coverage and distances for {dgp}, {stat}, {alpha}", fontsize=14)
+        for [dgp, stat, alpha], df in df_whole.groupby(['dgp', 'statistic', 'alpha']):
+            i += 1
+            if i == 3:
+                # TODO Delete
+                break
 
-        plt.subplot(2, 1, 1)
-        plot_coverage_bars(cov_df, colors=colors, ci=95, scale='linear', set_ylim=False, order=ord, hue='method', x='n')
-        plt.title('Coverages')
+            # plotting coverage
+            au = alpha if sided == 'onesided' else 0.5 + alpha / 2
+            cov_df = coverages[(coverages['dgp'] == dgp) & (coverages['statistic'] == stat) &
+                               (coverages['alpha'] == au)]
+            if sided == 'twosided':
+                cov_df2 = coverages[(coverages['dgp'] == dgp) & (coverages['statistic'] == stat) &
+                                    (coverages['alpha'] == round(1 - au, 5))]
+                # merge dataframes to be able to subtract coverages of same experiments
+                cov_df = pd.merge(cov_df, cov_df2, on=['method', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
+                                  suffixes=('_au', '_al'))
+                cov_df['coverage'] = cov_df['coverage_au'] - cov_df['coverage_al']
+                cov_df['alpha'] = cov_df['alpha_au'] - cov_df['alpha_al']
 
-        # long dataframe for distances
-        cols_here = df.dropna(axis=1, how='all').columns.tolist()
-        all_methods = ["percentile", "bca", "bc", "standard", "smoothed", "double", "studentized", "ttest", "wilcoxon",
-                       "ci_quant_param", "ci_quant_nonparam", "maritz-jarrett", "chi_sq", "ci_corr_pearson"]
-        methods_here = [m for m in all_methods if m in cols_here]
-        dist_df_long = pd.melt(df, id_vars=["alpha", "dgp", "n"], value_vars=methods_here, var_name="method",
-                               value_name="distance")
+            nm = cov_df['method'].nunique()
+            if nm > 10:
+                cols = plt.cm.tab20(np.linspace(0.05, 0.95, cov_df['method'].nunique()))
+            else:
+                cols = plt.cm.tab10(np.linspace(0.05, 0.95, cov_df['method'].nunique()))
+            colors = {m: c for (m, c) in zip(cov_df['method'].unique(), cols)}
+            order = cov_df['method'].unique()
 
-        # plotting distances
-        plt.subplot(2, 1, 2)
-        plt.title('Distances')
+            val_name = 'distance' if sided == 'onesided' else 'length'
 
-        sns.boxplot(x="n", y="distance", hue="method", data=dist_df_long, hue_order=ord, palette=colors)
-        plt.axhline(y=0, color="gray", linestyle="--")
-        plt.legend([], [], frameon=False)
+            fig = plt.figure(figsize=(6, 12), constrained_layout=True)
+            txt = fig.suptitle(f"Coverage and {val_name} for {dgp}, {stat}, {alpha}", fontsize=14)
 
-        handles, labels = plt.gca().get_legend_handles_labels()
-        lgd = fig.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(1, 0.5))
+            plt.subplot(2, 1, 1)
+            plot_coverage_bars(cov_df, colors=colors, ci=95, scale='linear', set_ylim=False, order=order, hue='method',
+                               x='n')
+            plt.title('Coverages')
 
-        plt.savefig(f'images/separate_experiments_onesided/cov_dist_{dgp}_{stat}_{alpha}.png',
-                    bbox_extra_artists=(lgd, txt), bbox_inches='tight')
+            # long dataframe for distances
+            cols_here = df.dropna(axis=1, how='all').columns.tolist()
+            all_methods = ["percentile", "bca", "bc", "standard", "smoothed", "double", "studentized", "ttest",
+                           "wilcoxon", "ci_quant_param", "ci_quant_nonparam", "maritz-jarrett", "chi_sq",
+                           "ci_corr_pearson"]
+            methods_here = [m for m in all_methods if m in cols_here]
+            dist_df_long = pd.melt(df, id_vars=["alpha", "dgp", "n"], value_vars=methods_here, var_name="method",
+                                   value_name=val_name)
+
+            # plotting distances
+            plt.subplot(2, 1, 2)
+            plt.title('Distances' if sided == 'onesided' else 'Lengths')
+
+            sns.boxplot(x="n", y=val_name, hue="method", data=dist_df_long, hue_order=order, palette=colors)
+            plt.axhline(y=0, color="gray", linestyle="--")
+            plt.legend([], [], frameon=False)
+
+            handles, labels = plt.gca().get_legend_handles_labels()
+            lgd = fig.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(1, 0.5))
+
+            plt.savefig(f'images/separate_experiments_{sided}/plots_{sided}_experiment_{dgp}_{stat}_{sided}_'
+                        f'{alpha}.png', bbox_extra_artists=(lgd, txt), bbox_inches='tight')
 
 
 if __name__ == '__main__':
