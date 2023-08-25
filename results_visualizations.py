@@ -722,6 +722,58 @@ def combine_results(combine_dist='mean', only_bts=True):
     all_results.to_csv(f'results/results_combined_{combine_dist}{["", "_bts"][int(only_bts)]}.csv', index=False)
 
 
+def separate_experiment_plots(result_folder='results'):
+
+    # onesided
+    coverages = pd.read_csv(f'{result_folder}/coverage.csv')
+    distances = pd.read_csv(f'{result_folder}/distance.csv')
+    i = 0
+    for [dgp, stat, alpha], df in distances.groupby(['dgp', 'statistic', 'alpha']):
+        i += 1
+        if i == 3: # TODO Delete
+            break
+
+        # plotting coverage
+        cov_df = coverages[(coverages['dgp'] == dgp) & (coverages['statistic'] == stat) & (coverages['alpha'] == alpha)]
+
+        nm = cov_df['method'].nunique()
+        if nm > 10:
+            cols = plt.cm.tab20(np.linspace(0.05, 0.95, cov_df['method'].nunique()))
+        else:
+            cols = plt.cm.tab10(np.linspace(0.05, 0.95, cov_df['method'].nunique()))
+        colors = {m: c for (m, c) in zip(cov_df['method'].unique(), cols)}
+        ord = cov_df['method'].unique()
+
+        fig = plt.figure(figsize=(6, 12), constrained_layout=True)
+        txt = fig.suptitle(f"Coverage and distances for {dgp}, {stat}, {alpha}", fontsize=14)
+
+        plt.subplot(2, 1, 1)
+        plot_coverage_bars(cov_df, colors=colors, ci=95, scale='linear', set_ylim=False, order=ord, hue='method', x='n')
+        plt.title('Coverages')
+
+        # long dataframe for distances
+        cols_here = df.dropna(axis=1, how='all').columns.tolist()
+        all_methods = ["percentile", "bca", "bc", "standard", "smoothed", "double", "studentized", "ttest", "wilcoxon",
+                       "ci_quant_param", "ci_quant_nonparam", "maritz-jarrett", "chi_sq", "ci_corr_pearson"]
+        methods_here = [m for m in all_methods if m in cols_here]
+        dist_df_long = pd.melt(df, id_vars=["alpha", "dgp", "n"], value_vars=methods_here, var_name="method",
+                               value_name="distance")
+
+        # plotting distances
+        plt.subplot(2, 1, 2)
+        plt.title('Distances')
+
+        sns.boxplot(x="n", y="distance", hue="method", data=dist_df_long, hue_order=ord, palette=colors)
+        plt.axhline(y=0, color="gray", linestyle="--")
+        plt.legend([], [], frameon=False)
+
+        handles, labels = plt.gca().get_legend_handles_labels()
+        lgd = fig.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(1, 0.5))
+
+        plt.savefig(f'images/separate_experiments_onesided/cov_dist_{dgp}_{stat}_{alpha}.png',
+                    bbox_extra_artists=(lgd, txt), bbox_inches='tight')
+
+
 if __name__ == '__main__':
     # folder_add = '_hierarchical'
     # folder_add = '_10000_reps'
@@ -758,7 +810,9 @@ if __name__ == '__main__':
 
     # better_methods_repetition_level('double', 'results_wide_nans')
 
-    plot_times_line()
+    # plot_times_line()
+
+    separate_experiment_plots('results')
 
 
 
