@@ -222,7 +222,7 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
     final_df2 = pd.DataFrame(results_better2)
     final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}.csv', index=False)
-    
+
     # script used to save them without any experiment with nans:
     # for name in ['twosided_bca_vs_others_B1000_reps_10000', 'twosided_double_vs_others_B1000_reps_10000']:
     #     table = pd.read_csv(f'results/{name}.csv')
