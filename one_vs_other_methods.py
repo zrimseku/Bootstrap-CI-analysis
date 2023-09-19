@@ -93,7 +93,7 @@ def analyze_coverage_m1_false(coverage_m2, true_coverage):
     result = analyze_coverage(coverage_m1, coverage_m2, true_coverage)
     result.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
                    'errordiff_mu': np.nan, 'errordiff_q025': np.nan, 'errordiff_q975': np.nan,
-                   'better_cov_prob': np.nan})
+                   'better_cov_prob': np.nan, 'better_prob_m1': np.nan, 'better_prob_m2': np.nan})
     return result
 
 
