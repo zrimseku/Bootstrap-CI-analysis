@@ -8,6 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from matplotlib import ticker
 
 
 def compare_all_cov_dis(df=None, comparing='coverage', methods=None, Bs=None, ns=None, folder_add=''):
@@ -168,6 +169,7 @@ def plot_coverage_bars(data, **kwargs):
         ax.set(ylim=ylim)
 
     ax.axhline(a, linestyle='--', color='gray')
+    plt.yticks(list(plt.yticks()[0]) + [a])
 
     ax.set_xlabel(kwargs['x'])
     ax.set_ylabel('coverage')
@@ -801,8 +803,11 @@ def separate_experiment_plots(result_folder='results', B=1000, reps=10000, showo
             sns.boxplot(x="n", y=val_name, hue="method", data=dist_df_long, hue_order=order, palette=colors,
                         showfliers=showoutliers)
             plt.axhline(y=0, color="gray", linestyle="--")
+            plt.yticks(list(plt.yticks()[0]) + [0])
             plt.legend([], [], frameon=False)
-            plt.yscale('symlog')
+            plt.yscale(['symlog', 'log'][int(sided == 'twosided')])
+            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: f'{value:.2f}'))
+            # plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 
             handles, labels = plt.gca().get_legend_handles_labels()
             lgd = fig.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(1, 0.5))
@@ -850,4 +855,4 @@ if __name__ == '__main__':
 
     # plot_times_line()
 
-    separate_experiment_plots('results', showoutliers=True)
+    separate_experiment_plots('results', showoutliers=False)
