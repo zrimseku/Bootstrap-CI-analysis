@@ -36,14 +36,14 @@ def get_error_transformed(true_coverage, alpha):
     return np.abs(sp.special.logit(true_coverage) - sp.special.logit(alpha))
 
 
-def are_equal_lo(err1, err2, alpha, base):
+def are_equal_lo(cov1, cov2, alpha, base):
     """Methods are equal in logit transformed space."""
-    return np.abs(get_error_transformed(err1, alpha) - get_error_transformed(err2, alpha)) <= base
+    return np.abs(get_error_transformed(cov1, alpha) - get_error_transformed(cov2, alpha)) <= base
 
 
-def is_better_lo(err1, err2, alpha, base):
+def is_better_lo(cov1, cov2, alpha, base):
     """First method is better in logit transformed space."""
-    return get_error_transformed(err1, alpha) - get_error_transformed(err2, alpha) < base
+    return get_error_transformed(cov1, alpha) - get_error_transformed(cov2, alpha) < base
 
 
 def analyze_coverage(coverage_m1, coverage_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94)):
@@ -63,27 +63,27 @@ def analyze_coverage(coverage_m1, coverage_m2, target_coverage, base=sp.special.
 
     p = sp.stats.dirichlet.rvs(y + 0.0001, size=10000)
 
-    coverageA = p[:, 1] + p[:, 3]
-    coverageB = p[:, 2] + p[:, 3]
+    coverage1 = p[:, 1] + p[:, 3]
+    coverage2 = p[:, 2] + p[:, 3]
 
-    errorA = np.abs(coverageA - target_coverage)
-    errorB = np.abs(coverageB - target_coverage)
+    error1 = np.abs(coverage1 - target_coverage)
+    error2 = np.abs(coverage2 - target_coverage)
 
-    error_diff = errorA - errorB
+    error_diff = error1 - error2
 
     return {
-        'coverage_m1_mu': np.mean(coverageA),
-        'coverage_m1_q025': np.percentile(coverageA, 2.5),
-        'coverage_m1_q975': np.percentile(coverageA, 97.5),
-        'coverage_m2_mu': np.mean(coverageB),
-        'coverage_m2_q025': np.percentile(coverageB, 2.5),
-        'coverage_m2_q975': np.percentile(coverageB, 97.5),
+        'coverage_m1_mu': np.mean(coverage1),
+        'coverage_m1_q025': np.percentile(coverage1, 2.5),
+        'coverage_m1_q975': np.percentile(coverage1, 97.5),
+        'coverage_m2_mu': np.mean(coverage2),
+        'coverage_m2_q025': np.percentile(coverage2, 2.5),
+        'coverage_m2_q975': np.percentile(coverage2, 97.5),
         'errordiff_mu': np.mean(error_diff),
         'errordiff_q025': np.percentile(error_diff, 2.5),
         'errordiff_q975': np.percentile(error_diff, 97.5),
-        'better_cov_prob': np.mean(error_diff <= 0),
-        'better_prob_m1': np.mean(is_better_lo(errorA, errorB, target_coverage, base)),        # method one is better
-        'better_prob_m2': np.mean(is_better_lo(errorB, errorA, target_coverage, base))         # method two is better
+        'better_cov_prob': np.mean(error_diff <= 0),                                            # method one is better
+        'better_prob_m1': np.mean(is_better_lo(coverage1, coverage2, target_coverage, base)),   # method one is better
+        'better_prob_m2': np.mean(is_better_lo(coverage2, coverage1, target_coverage, base))    # method two is better
     }
 
 
@@ -234,23 +234,10 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                     results_better2.append(exp_dict)
 
     final_df1 = pd.DataFrame(results_better1)
-    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}.csv', index=False)
+    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lt.csv', index=False)
 
     final_df2 = pd.DataFrame(results_better2)
-    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}.csv', index=False)
-
-    # script used to save them without any experiment with nans:
-    # for name in ['twosided_bca_vs_others_B1000_reps_10000', 'twosided_double_vs_others_B1000_reps_10000']:
-    #     table = pd.read_csv(f'results/{name}.csv')
-    #     t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
-    #     t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
-    #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
-    #
-    # for name in ['onesided_bca_vs_others_B1000_reps_10000', 'onesided_double_vs_others_B1000_reps_10000']:
-    #     table = pd.read_csv(f'results/{name}.csv')
-    #     t_nan = table[table['nan_perc_m1'] + table['nan_perc_m2'] == 0]
-    #     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
-    #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_lt.csv', index=False)
 
 
 def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
@@ -271,6 +258,19 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
     df_mean = df[['stat', 'n', 'method', 'better_cov_prob']].groupby(['stat', 'n', 'method']).mean()        # df_bad?
 
 
-one_vs_others('double', B=1000, reps=10000)
-one_vs_others('bca', B=1000, reps=10000)
+# one_vs_others('double', B=1000, reps=10000)
+# one_vs_others('bca', B=1000, reps=10000)
+
+# script used to save them without any experiment with nans:
+for name in ['twosided_bca_vs_others_B1000_reps_10000_lt', 'twosided_double_vs_others_B1000_reps_10000_lt']:
+    table = pd.read_csv(f'results/{name}.csv')
+    t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
+    t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
+    t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+
+for name in ['onesided_bca_vs_others_B1000_reps_10000_lt', 'onesided_double_vs_others_B1000_reps_10000_lt']:
+    table = pd.read_csv(f'results/{name}.csv')
+    t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
+    t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
+    t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
 
