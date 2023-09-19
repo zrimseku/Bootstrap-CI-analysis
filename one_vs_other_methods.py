@@ -43,7 +43,7 @@ def are_equal_lo(cov1, cov2, alpha, base):
 
 def is_better_lo(cov1, cov2, alpha, base):
     """First method is better in logit transformed space."""
-    return get_error_transformed(cov1, alpha) - get_error_transformed(cov2, alpha) < base
+    return (get_error_transformed(cov1, alpha) - get_error_transformed(cov2, alpha)) < -base
 
 
 def analyze_coverage(coverage_m1, coverage_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94)):
