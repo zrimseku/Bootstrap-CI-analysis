@@ -31,7 +31,22 @@ def analyze_length(lengthA, lengthB, len_dist='ld'):
     return result
 
 
-def analyze_coverage(coverage_m1, coverage_m2, target_coverage):
+def get_error_transformed(true_coverage, alpha):
+    """Transform error with logit function."""
+    return np.abs(sp.special.logit(true_coverage) - sp.special.logit(alpha))
+
+
+def are_equal_lo(err1, err2, alpha, base):
+    """Methods are equal in logit transformed space."""
+    return np.abs(get_error_transformed(err1, alpha) - get_error_transformed(err2, alpha)) <= base
+
+
+def is_better_lo(err1, err2, alpha, base):
+    """First method is better in logit transformed space."""
+    return get_error_transformed(err1, alpha) - get_error_transformed(err2, alpha) < base
+
+
+def analyze_coverage(coverage_m1, coverage_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94)):
     """Analyzes coverages of both methods. Average and confidence intervals for both, then percentage of times that the
     first method is better than the second one."""
     y = np.zeros(4)
@@ -46,8 +61,7 @@ def analyze_coverage(coverage_m1, coverage_m2, target_coverage):
         else:
             print('missing cases because of nans.')
 
-    alpha = y + 0.0001
-    p = sp.stats.dirichlet.rvs(alpha, size=10000)
+    p = sp.stats.dirichlet.rvs(y + 0.0001, size=10000)
 
     coverageA = p[:, 1] + p[:, 3]
     coverageB = p[:, 2] + p[:, 3]
@@ -67,7 +81,9 @@ def analyze_coverage(coverage_m1, coverage_m2, target_coverage):
         'errordiff_mu': np.mean(error_diff),
         'errordiff_q025': np.percentile(error_diff, 2.5),
         'errordiff_q975': np.percentile(error_diff, 97.5),
-        'better_cov_prob': np.mean(error_diff <= 0)            # TODO < ali <=
+        'better_cov_prob': np.mean(error_diff <= 0),
+        'better_prob_m1': np.mean(is_better_lo(errorA, errorB, target_coverage, base)),        # method one is better
+        'better_prob_m2': np.mean(is_better_lo(errorB, errorA, target_coverage, base))         # method two is better
     }
 
 
@@ -77,7 +93,7 @@ def analyze_coverage_m1_false(coverage_m2, true_coverage):
     result = analyze_coverage(coverage_m1, coverage_m2, true_coverage)
     result.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
                    'errordiff_mu': np.nan, 'errordiff_q025': np.nan, 'errordiff_q975': np.nan,
-                   'better_cov_prob': np.nan})
+                   'better_cov_prob': np.nan, 'better_prob_m1': np.nan, 'better_prob_m2': np.nan})
     return result
 
 
@@ -145,7 +161,7 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                 distance_m1 = abs(df_a[method_one] - df_a['exact']).values
 
                 for m2 in compare_to[stat]:             # compare to all other methods
-                    # TODO do we want to separate  those without predictions?
+                    # TODO do we want to separate those without predictions?
                     covers_m2 = (df_a[m2] > df_a['true_value']).values
                     distance_m2 = abs(df_a[m2] - df_a['exact']).values
 
