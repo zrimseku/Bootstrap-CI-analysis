@@ -234,9 +234,11 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                     results_better2.append(exp_dict)
 
     final_df1 = pd.DataFrame(results_better1)
+    final_df1.sort_values(by='better_prob_m2', ascending=False)
     final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lt.csv', index=False)
 
     final_df2 = pd.DataFrame(results_better2)
+    final_df2.sort_values(by='better_prob_m2', ascending=False)
     final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_lt.csv', index=False)
 
 
@@ -258,8 +260,8 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
     df_mean = df[['stat', 'n', 'method', 'better_cov_prob']].groupby(['stat', 'n', 'method']).mean()        # df_bad?
 
 
-# one_vs_others('double', B=1000, reps=10000)
-# one_vs_others('bca', B=1000, reps=10000)
+one_vs_others('double', B=1000, reps=10000)
+one_vs_others('bca', B=1000, reps=10000)
 
 # script used to save them without any experiment with nans:
 for name in ['twosided_bca_vs_others_B1000_reps_10000_lt', 'twosided_double_vs_others_B1000_reps_10000_lt']:
