@@ -259,6 +259,11 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
     # mean probability by grouping
     df_mean = df[['stat', 'n', 'method', 'better_cov_prob']].groupby(['stat', 'n', 'method']).mean()        # df_bad?
 
+    bad_n = df_bad[['method', 'n']].value_counts()
+    bad_d = df_bad[['method', 'dgp']].value_counts()
+    bad_s = df_bad[['method', 'stat']].value_counts()
+    bad_ns = df_bad[['method', 'n', 'stat']].value_counts()
+
 
 one_vs_others('double', B=1000, reps=10000)
 one_vs_others('bca', B=1000, reps=10000)
