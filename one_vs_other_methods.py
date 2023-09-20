@@ -31,32 +31,43 @@ def analyze_length(lengthA, lengthB, len_dist='ld'):
     return result
 
 
-def get_error_transformed(true_coverage, alpha):
+def get_error_transformed_lo(true_coverage, alpha):
     """Transform error with logit function."""
     return np.abs(sp.special.logit(true_coverage) - sp.special.logit(alpha))
 
 
 def are_equal_lo(cov1, cov2, alpha, base):
     """Methods are equal in logit transformed space."""
-    return np.abs(get_error_transformed(cov1, alpha) - get_error_transformed(cov2, alpha)) <= base
+    return np.abs(get_error_transformed_lo(cov1, alpha) - get_error_transformed_lo(cov2, alpha)) <= base
 
 
 def is_better_lo(cov1, cov2, alpha, base):
     """First method is better in logit transformed space."""
-    return (get_error_transformed(cov1, alpha) - get_error_transformed(cov2, alpha)) < -base
+    return (get_error_transformed_lo(cov1, alpha) - get_error_transformed_lo(cov2, alpha)) < -base
 
 
-def analyze_coverage(coverage_m1, coverage_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94)):
+def kl(p, q):
+    """K-L divergence."""
+    return p * np.log2(p / q) + (1 - p) * np.log2((1 - p) / (1 - q))
+
+
+def is_better_kl(cov1, cov2, alpha, base):
+    """First method is better if we compare K-L divergences of their coverages."""
+    return kl(cov1, alpha) - kl(cov2, alpha) < -base
+
+
+def analyze_coverage(covers_m1, covers_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94),
+                     basekl=kl(0.9, 0.95)):
     """Analyzes coverages of both methods. Average and confidence intervals for both, then percentage of times that the
     first method is better than the second one."""
     y = np.zeros(4)
-    y[0] = np.sum((coverage_m1 == 0) & (coverage_m2 == 0))
-    y[1] = np.sum((coverage_m1 == 1) & (coverage_m2 == 0))
-    y[2] = np.sum((coverage_m1 == 0) & (coverage_m2 == 1))
-    y[3] = np.sum((coverage_m1 == 1) & (coverage_m2 == 1))
+    y[0] = np.sum((covers_m1 == 0) & (covers_m2 == 0))
+    y[1] = np.sum((covers_m1 == 1) & (covers_m2 == 0))
+    y[2] = np.sum((covers_m1 == 0) & (covers_m2 == 1))
+    y[3] = np.sum((covers_m1 == 1) & (covers_m2 == 1))
 
-    if sum(y) != len(coverage_m1):
-        if sum(y) + np.sum(coverage_m1 == np.nan) + np.sum(coverage_m2 == np.nan) != len(coverage_m1):
+    if sum(y) != len(covers_m1):
+        if sum(y) + np.sum(covers_m1 == np.nan) + np.sum(covers_m2 == np.nan) != len(covers_m1):
             print('missing cases in y!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         else:
             print('missing cases because of nans.')
@@ -71,6 +82,10 @@ def analyze_coverage(coverage_m1, coverage_m2, target_coverage, base=sp.special.
 
     error_diff = error1 - error2
 
+    # without simulation
+    coverage_m1 = np.mean(covers_m1)
+    coverage_m2 = np.mean(covers_m2)
+
     return {
         'coverage_m1_mu': np.mean(coverage1),
         'coverage_m1_q025': np.percentile(coverage1, 2.5),
@@ -81,9 +96,16 @@ def analyze_coverage(coverage_m1, coverage_m2, target_coverage, base=sp.special.
         'errordiff_mu': np.mean(error_diff),
         'errordiff_q025': np.percentile(error_diff, 2.5),
         'errordiff_q975': np.percentile(error_diff, 97.5),
-        'better_cov_prob': np.mean(error_diff <= 0),                                            # method one is better
-        'better_prob_m1': np.mean(is_better_lo(coverage1, coverage2, target_coverage, base)),   # method one is better
-        'better_prob_m2': np.mean(is_better_lo(coverage2, coverage1, target_coverage, base))    # method two is better
+        # method one is better based on simulation and linear error:
+        'better_cov_prob': np.mean(error_diff <= 0),
+        # method one is better based on simulation and logistic transformation of error:
+        'better_prob_m1': np.mean(is_better_lo(coverage1, coverage2, target_coverage, base)),
+        # method two is better based on simulation and logistic transformation of error:
+        'better_prob_m2': np.mean(is_better_lo(coverage2, coverage1, target_coverage, base)),
+        # method one is better based on smaller KL divergence of it's true coverage (no simulation):
+        'm1_better_kl': is_better_kl(coverage_m1, coverage_m2, target_coverage, basekl),
+        # method one is better based on smaller KL divergence of it's true coverage (no simulation):
+        'm2_better_kl': is_better_kl(coverage_m2, coverage_m1, target_coverage, basekl)
     }
 
 
@@ -235,11 +257,11 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
     final_df1 = pd.DataFrame(results_better1)
     final_df1.sort_values(by='better_prob_m2', ascending=False)
-    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lt.csv', index=False)
+    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lt_kl.csv', index=False)
 
     final_df2 = pd.DataFrame(results_better2)
     final_df2.sort_values(by='better_prob_m2', ascending=False)
-    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_lt.csv', index=False)
+    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_lt_kl.csv', index=False)
 
 
 def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
@@ -269,13 +291,13 @@ one_vs_others('double', B=1000, reps=10000)
 one_vs_others('bca', B=1000, reps=10000)
 
 # script used to save them without any experiment with nans:
-for name in ['twosided_bca_vs_others_B1000_reps_10000_lt', 'twosided_double_vs_others_B1000_reps_10000_lt']:
+for name in ['twosided_bca_vs_others_B1000_reps_10000_lt_kl', 'twosided_double_vs_others_B1000_reps_10000_lt_kl']:
     table = pd.read_csv(f'results/{name}.csv')
     t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
     t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
 
-for name in ['onesided_bca_vs_others_B1000_reps_10000_lt', 'onesided_double_vs_others_B1000_reps_10000_lt']:
+for name in ['onesided_bca_vs_others_B1000_reps_10000_lt_kl', 'onesided_double_vs_others_B1000_reps_10000_lt_kl']:
     table = pd.read_csv(f'results/{name}.csv')
     t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
