@@ -57,7 +57,7 @@ def is_better_kl(cov1, cov2, alpha, base):
 
 
 def analyze_coverage(covers_m1, covers_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94),
-                     basekl=kl(0.9, 0.95)):
+                     basekl=kl(0.94, 0.95)):
     """Analyzes coverages of both methods. Average and confidence intervals for both, then percentage of times that the
     first method is better than the second one."""
     y = np.zeros(4)
