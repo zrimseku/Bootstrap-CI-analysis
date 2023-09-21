@@ -18,10 +18,12 @@ def analyze_length(lengthA, lengthB, len_dist='ld'):
     norm_is_neg_prob = 0 if norm_se == 0 else sp.stats.norm.cdf(0, norm_mu, norm_se)
 
     result = {
+        f'{len_dist}_m1': np.mean(lengthA),
+        f'{len_dist}_m2': np.mean(lengthB),
         'diff_mu': diff_mu,
         'diff_q025': diff_mu + sp.stats.norm.ppf(0.025) * diff_se,
         'diff_q975': diff_mu + sp.stats.norm.ppf(0.975) * diff_se,
-        f'better_{len_dist}_prob': diff_is_neg_prob,
+        f'better_{len_dist}_prob': diff_is_neg_prob,                            # probability that method A is better
         'norm_mu': norm_mu,
         'norm_q025': norm_mu + sp.stats.norm.ppf(0.025) * norm_se,
         'norm_q975': norm_mu + sp.stats.norm.ppf(0.975) * norm_se,
@@ -287,19 +289,46 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
     bad_ns = df_bad[['method', 'n', 'stat']].value_counts()
 
 
-one_vs_others('double', B=1000, reps=10000)
-one_vs_others('bca', B=1000, reps=10000)
+def analyze_experiments(method_one, other_methods=None, result_folder='results', B=1000, reps=10000):
 
-# script used to save them without any experiment with nans:
-for name in ['twosided_bca_vs_others_B1000_reps_10000_lt_kl', 'twosided_double_vs_others_B1000_reps_10000_lt_kl']:
-    table = pd.read_csv(f'results/{name}.csv')
-    t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
-    t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
-    t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+    df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lt_kl_nonans.csv')
+    df_bad = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_prob'] < 0.1))]
 
-for name in ['onesided_bca_vs_others_B1000_reps_10000_lt_kl', 'onesided_double_vs_others_B1000_reps_10000_lt_kl']:
-    table = pd.read_csv(f'results/{name}.csv')
-    t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
-    t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
-    t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+    print(f'There are {df_bad.shape[0]} cases where a method is better than {method_one}.'
+          f'Out of them {df_bad[df_bad["m2_better_kl"]].shape[0]} have better coverage.')
+
+    bad_n = pd.DataFrame(df_bad[['method', 'n']].value_counts())
+    bad_d = pd.DataFrame(df_bad[['method', 'dgp']].value_counts())
+    bad_s = pd.DataFrame(df_bad[['method', 'stat']].value_counts())
+    bad_ns = pd.DataFrame(df_bad[['method', 'n', 'stat']].value_counts())
+
+    for method, stat in bad_s.index:
+        for alpha in sorted(df_bad['alpha'].unique()):
+            bad_s.loc[(method, stat), alpha] = ', '.join(str(n) for n in
+                                                         sorted(df_bad[(df_bad['method'] == method) &
+                                                                       (df_bad['stat'] == stat) &
+                                                                       (df_bad['alpha'] == alpha)]['n'].unique()))
+
+    test = 0
+
+
+if __name__ == '__main__':
+
+    # one_vs_others('double', B=1000, reps=10000)
+    # one_vs_others('bca', B=1000, reps=10000)
+    #
+    # # script used to save them without any experiment with nans:
+    # for name in ['twosided_bca_vs_others_B1000_reps_10000_lt_kl', 'twosided_double_vs_others_B1000_reps_10000_lt_kl']:
+    #     table = pd.read_csv(f'results/{name}.csv')
+    #     t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
+    #     t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
+    #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+    #
+    # for name in ['onesided_bca_vs_others_B1000_reps_10000_lt_kl', 'onesided_double_vs_others_B1000_reps_10000_lt_kl']:
+    #     table = pd.read_csv(f'results/{name}.csv')
+    #     t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
+    #     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
+    #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+
+    analyze_experiments('double')
 
