@@ -3,7 +3,7 @@ import scipy as sp
 import pandas as pd
 
 
-def analyze_length(lengthA, lengthB, len_dist='ld'):
+def analyze_length(lengthA, lengthB, len_dist='ld', better_coef=1.01):
     """Compares length of two sided intervals or distance to exact intervals (input absolute distances)"""
 
     diff = lengthA - lengthB
@@ -17,9 +17,12 @@ def analyze_length(lengthA, lengthB, len_dist='ld'):
 
     norm_is_neg_prob = 0 if norm_se == 0 else sp.stats.norm.cdf(0, norm_mu, norm_se)
 
+    meanA = np.mean(np.abs(lengthA))
+    meanB = np.mean(np.abs(lengthB))
+
     result = {
-        f'{len_dist}_m1': np.mean(lengthA),
-        f'{len_dist}_m2': np.mean(lengthB),
+        f'{len_dist}_m1': meanA,
+        f'{len_dist}_m2': meanB,
         'diff_mu': diff_mu,
         'diff_q025': diff_mu + sp.stats.norm.ppf(0.025) * diff_se,
         'diff_q975': diff_mu + sp.stats.norm.ppf(0.975) * diff_se,
@@ -27,7 +30,9 @@ def analyze_length(lengthA, lengthB, len_dist='ld'):
         'norm_mu': norm_mu,
         'norm_q025': norm_mu + sp.stats.norm.ppf(0.025) * norm_se,
         'norm_q975': norm_mu + sp.stats.norm.ppf(0.975) * norm_se,
-        f'better_{len_dist}_prob_norm': norm_is_neg_prob
+        f'better_{len_dist}_prob_norm': norm_is_neg_prob,
+        f'better_{len_dist}_m1': meanA * better_coef < meanB,
+        f'better_{len_dist}_m2': meanB * better_coef < meanA
     }
 
     return result
@@ -50,7 +55,9 @@ def is_better_lo(cov1, cov2, alpha, base):
 
 def kl(p, q):
     """K-L divergence."""
-    return p * np.log2(p / q) + (1 - p) * np.log2((1 - p) / (1 - q))
+    part1 = 0 if p == 0 else p * np.log2(p / q)
+    part2 = 0 if p == 1 else (1 - p) * np.log2((1 - p) / (1 - q))
+    return part1 + part2
 
 
 def is_better_kl(cov1, cov2, alpha, base):
@@ -58,8 +65,18 @@ def is_better_kl(cov1, cov2, alpha, base):
     return kl(cov1, alpha) - kl(cov2, alpha) < -base
 
 
+def jsd(p, q):
+    """Jensen Shannon Distance"""
+    m = (p + q) / 2
+    return 0.5 * kl(p, m) + 0.5 * kl(q, m)
+
+
+def is_better_jsd(cov1, cov2, alpha, base):
+    return jsd(cov1, alpha) - jsd(cov2, alpha) < -base
+
+
 def analyze_coverage(covers_m1, covers_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94),
-                     basekl=kl(0.94, 0.95)):
+                     basekl=kl(0.94, 0.95), basejsd=jsd(0.94, 0.95)):
     """Analyzes coverages of both methods. Average and confidence intervals for both, then percentage of times that the
     first method is better than the second one."""
     y = np.zeros(4)
@@ -107,7 +124,11 @@ def analyze_coverage(covers_m1, covers_m2, target_coverage, base=sp.special.logi
         # method one is better based on smaller KL divergence of it's true coverage (no simulation):
         'm1_better_kl': is_better_kl(coverage_m1, coverage_m2, target_coverage, basekl),
         # method one is better based on smaller KL divergence of it's true coverage (no simulation):
-        'm2_better_kl': is_better_kl(coverage_m2, coverage_m1, target_coverage, basekl)
+        'm2_better_kl': is_better_kl(coverage_m2, coverage_m1, target_coverage, basekl),
+        # method one is better based on smaller JS distance of it's true coverage (no simulation):
+        'm1_better_jsd': is_better_kl(coverage_m1, coverage_m2, target_coverage, basejsd),
+        # method one is better based on smaller JS distance of it's true coverage (no simulation):
+        'm2_better_jsd': is_better_kl(coverage_m2, coverage_m1, target_coverage, basejsd)
     }
 
 
@@ -314,21 +335,21 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
 
 if __name__ == '__main__':
 
-    # one_vs_others('double', B=1000, reps=10000)
-    # one_vs_others('bca', B=1000, reps=10000)
-    #
-    # # script used to save them without any experiment with nans:
-    # for name in ['twosided_bca_vs_others_B1000_reps_10000_lt_kl', 'twosided_double_vs_others_B1000_reps_10000_lt_kl']:
-    #     table = pd.read_csv(f'results/{name}.csv')
-    #     t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
-    #     t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
-    #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
-    #
-    # for name in ['onesided_bca_vs_others_B1000_reps_10000_lt_kl', 'onesided_double_vs_others_B1000_reps_10000_lt_kl']:
-    #     table = pd.read_csv(f'results/{name}.csv')
-    #     t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
-    #     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
-    #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+    one_vs_others('double', B=1000, reps=10000)
+    one_vs_others('bca', B=1000, reps=10000)
 
-    analyze_experiments('double')
+    # script used to save them without any experiment with nans:
+    for name in ['twosided_bca_vs_others_B1000_reps_10000_lt_kl', 'twosided_double_vs_others_B1000_reps_10000_lt_kl']:
+        table = pd.read_csv(f'results/{name}.csv')
+        t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
+        t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
+        t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+
+    for name in ['onesided_bca_vs_others_B1000_reps_10000_lt_kl', 'onesided_double_vs_others_B1000_reps_10000_lt_kl']:
+        table = pd.read_csv(f'results/{name}.csv')
+        t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
+        t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
+        t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+
+    # analyze_experiments('double')
 
