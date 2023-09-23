@@ -381,12 +381,12 @@ if __name__ == '__main__':
         table = pd.read_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10.csv')
         t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
         t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
-        t_nan.to_csv(f'results/{m}_nonans.csv', index=False)
+        t_nan.to_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
 
         table = pd.read_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10.csv')
         t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
         t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
-        t_nan.to_csv(f'results/{m}_nonans.csv', index=False)
+        t_nan.to_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
 
     # analyze_experiments('studentized', statistics=['percentile_5', 'percentile_95'])
 
