@@ -300,7 +300,7 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
 def analyze_experiments(method_one, other_methods=None, result_folder='results', B=1000, reps=10000, statistics=None,
                         ns=None):
 
-    df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lsd10_nonans.csv')
+    df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_d10_nonans.csv')
     # df_bad = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_prob']<0.1))]
 
     if statistics is not None:
@@ -370,24 +370,23 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
         results[name].to_csv(f'results_better/{method_one}_{name}.csv')
 
 
-
 if __name__ == '__main__':
 
-    # one_vs_others('double', B=1000, reps=10000)
-    # one_vs_others('bca', B=1000, reps=10000)
-    #
-    # # script used to save them without any experiment with nans:
-    # for name in ['twosided_bca_vs_others_B1000_reps_10000_lt_kl', 'twosided_double_vs_others_B1000_reps_10000_lt_kl']:
-    #     table = pd.read_csv(f'results/{name}.csv')
-    #     t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
-    #     t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
-    #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
-    #
-    # for name in ['onesided_bca_vs_others_B1000_reps_10000_lt_kl', 'onesided_double_vs_others_B1000_reps_10000_lt_kl']:
-    #     table = pd.read_csv(f'results/{name}.csv')
-    #     t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
-    #     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
-    #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
+    methods = ['double', 'bca', 'studentized']
 
-    analyze_experiments('studentized', statistics=['percentile_5', 'percentile_95'])
+    for m in methods:
+
+        one_vs_others(m, B=1000, reps=10000)
+
+        table = pd.read_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10.csv')
+        t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
+        t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
+        t_nan.to_csv(f'results/{m}_nonans.csv', index=False)
+
+        table = pd.read_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10.csv')
+        t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
+        t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
+        t_nan.to_csv(f'results/{m}_nonans.csv', index=False)
+
+    # analyze_experiments('studentized', statistics=['percentile_5', 'percentile_95'])
 
