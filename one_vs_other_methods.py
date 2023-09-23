@@ -3,7 +3,7 @@ import scipy as sp
 import pandas as pd
 
 
-def analyze_length(lengthA, lengthB, len_dist='ld', better_coef=1.01):
+def analyze_length(lengthA, lengthB, len_dist='ld', better_coef=1.1):
     """Compares length of two sided intervals or distance to exact intervals (input absolute distances)"""
 
     diff = lengthA - lengthB
@@ -65,18 +65,8 @@ def is_better_kl(cov1, cov2, alpha, base):
     return kl(cov1, alpha) - kl(cov2, alpha) < -base
 
 
-def jsd(p, q):
-    """Jensen Shannon Distance"""
-    m = (p + q) / 2
-    return 0.5 * kl(p, m) + 0.5 * kl(q, m)
-
-
-def is_better_jsd(cov1, cov2, alpha, base):
-    return jsd(cov1, alpha) - jsd(cov2, alpha) < -base
-
-
 def analyze_coverage(covers_m1, covers_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94),
-                     basekl=kl(0.94, 0.95), basejsd=jsd(0.94, 0.95)):
+                     basekl=kl(0.94, 0.95)):
     """Analyzes coverages of both methods. Average and confidence intervals for both, then percentage of times that the
     first method is better than the second one."""
     y = np.zeros(4)
@@ -124,11 +114,8 @@ def analyze_coverage(covers_m1, covers_m2, target_coverage, base=sp.special.logi
         # method one is better based on smaller KL divergence of it's true coverage (no simulation):
         'm1_better_kl': is_better_kl(coverage_m1, coverage_m2, target_coverage, basekl),
         # method one is better based on smaller KL divergence of it's true coverage (no simulation):
-        'm2_better_kl': is_better_kl(coverage_m2, coverage_m1, target_coverage, basekl),
+        'm2_better_kl': is_better_kl(coverage_m2, coverage_m1, target_coverage, basekl)
         # method one is better based on smaller JS distance of it's true coverage (no simulation):
-        'm1_better_jsd': is_better_kl(coverage_m1, coverage_m2, target_coverage, basejsd),
-        # method one is better based on smaller JS distance of it's true coverage (no simulation):
-        'm2_better_jsd': is_better_kl(coverage_m2, coverage_m1, target_coverage, basejsd)
     }
 
 
@@ -280,11 +267,11 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
     final_df1 = pd.DataFrame(results_better1)
     final_df1.sort_values(by='better_prob_m2', ascending=False)
-    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lt_kl.csv', index=False)
+    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_d10.csv', index=False)
 
     final_df2 = pd.DataFrame(results_better2)
     final_df2.sort_values(by='better_prob_m2', ascending=False)
-    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_lt_kl.csv', index=False)
+    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_d10.csv', index=False)
 
 
 def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
@@ -339,13 +326,13 @@ if __name__ == '__main__':
     one_vs_others('bca', B=1000, reps=10000)
 
     # script used to save them without any experiment with nans:
-    for name in ['twosided_bca_vs_others_B1000_reps_10000_lt_kl', 'twosided_double_vs_others_B1000_reps_10000_lt_kl']:
+    for name in ['twosided_bca_vs_others_B1000_reps_10000_lsd10', 'twosided_double_vs_others_B1000_reps_10000_lsd10']:
         table = pd.read_csv(f'results/{name}.csv')
         t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
         t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
         t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
 
-    for name in ['onesided_bca_vs_others_B1000_reps_10000_lt_kl', 'onesided_double_vs_others_B1000_reps_10000_lt_kl']:
+    for name in ['onesided_bca_vs_others_B1000_reps_10000_lsd10', 'onesided_double_vs_others_B1000_reps_10000_lsd10']:
         table = pd.read_csv(f'results/{name}.csv')
         t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
         t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
