@@ -3,7 +3,7 @@ import scipy as sp
 import pandas as pd
 
 
-def analyze_length(lengthA, lengthB, len_dist='ld', better_coef=1.01):
+def analyze_length(lengthA, lengthB, len_dist='ld', better_coef=1.1):
     """Compares length of two sided intervals or distance to exact intervals (input absolute distances)"""
 
     diff = lengthA - lengthB
@@ -65,18 +65,8 @@ def is_better_kl(cov1, cov2, alpha, base):
     return kl(cov1, alpha) - kl(cov2, alpha) < -base
 
 
-def jsd(p, q):
-    """Jensen Shannon Distance"""
-    m = (p + q) / 2
-    return 0.5 * kl(p, m) + 0.5 * kl(q, m)
-
-
-def is_better_jsd(cov1, cov2, alpha, base):
-    return jsd(cov1, alpha) - jsd(cov2, alpha) < -base
-
-
 def analyze_coverage(covers_m1, covers_m2, target_coverage, base=sp.special.logit(0.95) - sp.special.logit(0.94),
-                     basekl=kl(0.94, 0.95), basejsd=jsd(0.94, 0.95)):
+                     basekl=kl(0.94, 0.95)):
     """Analyzes coverages of both methods. Average and confidence intervals for both, then percentage of times that the
     first method is better than the second one."""
     y = np.zeros(4)
@@ -124,11 +114,8 @@ def analyze_coverage(covers_m1, covers_m2, target_coverage, base=sp.special.logi
         # method one is better based on smaller KL divergence of it's true coverage (no simulation):
         'm1_better_kl': is_better_kl(coverage_m1, coverage_m2, target_coverage, basekl),
         # method one is better based on smaller KL divergence of it's true coverage (no simulation):
-        'm2_better_kl': is_better_kl(coverage_m2, coverage_m1, target_coverage, basekl),
+        'm2_better_kl': is_better_kl(coverage_m2, coverage_m1, target_coverage, basekl)
         # method one is better based on smaller JS distance of it's true coverage (no simulation):
-        'm1_better_jsd': is_better_kl(coverage_m1, coverage_m2, target_coverage, basejsd),
-        # method one is better based on smaller JS distance of it's true coverage (no simulation):
-        'm2_better_jsd': is_better_kl(coverage_m2, coverage_m1, target_coverage, basejsd)
     }
 
 
@@ -280,11 +267,11 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
     final_df1 = pd.DataFrame(results_better1)
     final_df1.sort_values(by='better_prob_m2', ascending=False)
-    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lt_kl.csv', index=False)
+    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_d10.csv', index=False)
 
     final_df2 = pd.DataFrame(results_better2)
     final_df2.sort_values(by='better_prob_m2', ascending=False)
-    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_lt_kl.csv', index=False)
+    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_d10.csv', index=False)
 
 
 def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
