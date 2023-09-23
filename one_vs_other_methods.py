@@ -300,7 +300,7 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
 def analyze_experiments(method_one, other_methods=None, result_folder='results', B=1000, reps=10000, statistics=None,
                         ns=None):
 
-    df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_lsd10_nonans.csv')
+    df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_d10_nonans.csv')
     # df_bad = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_prob']<0.1))]
 
     if statistics is not None:
@@ -388,6 +388,8 @@ if __name__ == '__main__':
     #     t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
     #     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
     #     t_nan.to_csv(f'results/{name}_nonans.csv', index=False)
-
+    
+    analyze_experiments('double')
+    analyze_experiments('bca')
     analyze_experiments('studentized', statistics=['percentile_5', 'percentile_95'])
 
