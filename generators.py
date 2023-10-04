@@ -275,10 +275,11 @@ class DGPRandEff(DGP):
                     print(f'Actual sample size, obtained from group_sizes ({sample_size_true}) is not the same as '
                           f'specified sample_size ({sample_size}).')
 
-        size = (nr_samples, sample_size)
+        size = (nr_samples, sample_size)        # TODO: a bi blo bolj smiselno spremenit tole v true_sample_size?? error
         data = np.zeros(size) + self.mean
 
         def add_error(indices, data, depth, err):
+            # TODO: to ni zares error, ampak varianca, zakaj ga tko imenuješ?
             if isinstance(indices, int):
                 data[:, indices] += err
             else:

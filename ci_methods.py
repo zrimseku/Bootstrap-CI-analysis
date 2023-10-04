@@ -36,7 +36,6 @@ class Bootstrap:
         :param sampling_args: sampling arguments, used when doing hierarchical sampling. They should include 'method',
         implemented methods are 'cases' and 'random-effect'. For 'cases' sampling 'strategy' also needs to be defined.
         """
-        # TODO: include semi-parametric and parametric sampling
         if seed is not None:
             np.random.seed(seed)
         self.b = nr_bootstrap_samples
@@ -45,7 +44,7 @@ class Bootstrap:
             self.bootstrap_indices = np.random.choice(range(self.n), size=[nr_bootstrap_samples, self.n])
 
         elif sampling == 'hierarchical':
-            method = sampling_args['method']            # cases / random-effect / residuals?
+            method = sampling_args['method']            # cases / random-effect
 
             if method == 'cases':
                 groups_n = [[self.group_indices.copy()] for _ in range(nr_bootstrap_samples)]
