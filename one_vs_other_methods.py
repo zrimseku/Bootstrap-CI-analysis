@@ -372,7 +372,7 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
 
 if __name__ == '__main__':
 
-    methods = ['double', 'bca', 'studentized']
+    methods = ['standard']
 
     for m in methods:
 
@@ -388,5 +388,5 @@ if __name__ == '__main__':
         t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
         t_nan.to_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
 
-    # analyze_experiments('studentized', statistics=['percentile_5', 'percentile_95'])
+    analyze_experiments('standard', statistics=['percentile_5', 'percentile_95'])
 
