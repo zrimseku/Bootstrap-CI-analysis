@@ -308,6 +308,13 @@ def compare_variances():
     return res_int, res_cov
 
 
+def kl(p, q):
+    """K-L divergence."""
+    part1 = np.where(p == 0, 0, p * np.log2(p / q))
+    part2 = np.where(p == 1, 0, (1 - p) * np.log2((1 - p) / (1 - q)))
+    return part1 + part2
+
+
 def aggregate_results(result_folder, methods=None, combined_with='mean', withnans=True, onlybts=True):
     # reading and filtering coverage table
     results = pd.read_csv(f'{result_folder}/results_from_intervals_{combined_with}{["", "_bts"][int(onlybts)]}'
@@ -333,8 +340,13 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
     results['std'] = np.sqrt(results['best_coverage'] * (1 - results['best_coverage']) / results['repetitions'])
     results['near_best'] = abs(results['best_coverage'] - results['coverage']) < results['std']
 
+    # calculation for KL-divergence
+    results['kl_div'] = kl(results['coverage'], results['alpha'])
+
     # calculation for ranks
     results['rank'] = results[['alpha', 'abs_difference', 'dgp', 'statistic', 'n']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).rank()
+    results['rank_kl'] = results[['alpha', 'kl_div', 'dgp', 'statistic', 'n']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).rank()
 
     # tables
@@ -357,6 +369,26 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
     avg_rank_stat = results[['method', 'rank', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
     avg_rank_stat.columns = avg_rank_stat.columns.droplevel()
     avg_rank = avg_rank.join(avg_rank_stat).sort_values(by='rank')
+
+    kl_div = results[['method', 'kl_div']].groupby(['method']).mean()
+
+    kl_div_n = results[['method', 'kl_div', 'n']].groupby(['method', 'n']).mean().unstack()
+    kl_div_n.columns = kl_div_n.columns.droplevel()
+    kl_div = kl_div.join(kl_div_n)
+
+    kl_div_stat = results[['method', 'kl_div', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
+    kl_div_stat.columns = kl_div_stat.columns.droplevel()
+    kl_div = kl_div.join(kl_div_stat).sort_values(by='kl_div')
+
+    kl_div_rank = results[['method', 'rank_kl']].groupby(['method']).mean()
+
+    kl_div_rank_n = results[['method', 'rank_kl', 'n']].groupby(['method', 'n']).mean().unstack()
+    kl_div_rank_n.columns = kl_div_rank_n.columns.droplevel()
+    kl_div_rank = kl_div_rank.join(kl_div_rank_n)
+
+    kl_div_rank_stat = results[['method', 'rank_kl', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
+    kl_div_rank_stat.columns = kl_div_rank_stat.columns.droplevel()
+    kl_div_rank = kl_div_rank.join(kl_div_rank_stat).sort_values(by='rank_kl')
 
     dist_table = results[['method', 'avg_distance']].groupby(['method']).median()
 
@@ -408,7 +440,7 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
 
     # t = results[results['method'].isin(['double', 'standard'])] for finding experiment for histogram
 
-    return near_best, avg_rank, dist_table, nans_all
+    return near_best, avg_rank, dist_table, nans_all, kl_div, kl_div_rank
 
 
 def better_methods(method, result_folder, combined_with='mean', withnans=True, onlybts=True):

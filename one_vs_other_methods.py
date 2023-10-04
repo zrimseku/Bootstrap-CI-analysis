@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
 import pandas as pd
+from results_visualizations import kl
 
 
 def analyze_length(lengthA, lengthB, len_dist='ld', better_coef=1.1):
@@ -51,13 +52,6 @@ def are_equal_lo(cov1, cov2, alpha, base):
 def is_better_lo(cov1, cov2, alpha, base):
     """First method is better in logit transformed space."""
     return (get_error_transformed_lo(cov1, alpha) - get_error_transformed_lo(cov2, alpha)) < -base
-
-
-def kl(p, q):
-    """K-L divergence."""
-    part1 = 0 if p == 0 else p * np.log2(p / q)
-    part2 = 0 if p == 1 else (1 - p) * np.log2((1 - p) / (1 - q))
-    return part1 + part2
 
 
 def is_better_kl(cov1, cov2, alpha, base):
