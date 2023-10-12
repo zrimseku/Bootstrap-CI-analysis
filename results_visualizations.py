@@ -380,6 +380,16 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
     kl_div_stat.columns = kl_div_stat.columns.droplevel()
     kl_div = kl_div.join(kl_div_stat).sort_values(by='kl_div')
 
+    kl_div_med = results[['method', 'kl_div']].groupby(['method']).median()
+
+    kl_div_n_med = results[['method', 'kl_div', 'n']].groupby(['method', 'n']).median().unstack()
+    kl_div_n_med.columns = kl_div_n_med.columns.droplevel()
+    kl_div_med = kl_div_med.join(kl_div_n_med)
+
+    kl_div_stat_med = results[['method', 'kl_div', 'statistic']].groupby(['method', 'statistic']).median().unstack()
+    kl_div_stat_med.columns = kl_div_stat_med.columns.droplevel()
+    kl_div_med = kl_div_med.join(kl_div_stat_med).sort_values(by='kl_div')
+
     kl_div_rank = results[['method', 'rank_kl']].groupby(['method']).mean()
 
     kl_div_rank_n = results[['method', 'rank_kl', 'n']].groupby(['method', 'n']).mean().unstack()
@@ -440,7 +450,7 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
 
     # t = results[results['method'].isin(['double', 'standard'])] for finding experiment for histogram
 
-    return near_best, avg_rank, dist_table, nans_all, kl_div, kl_div_rank
+    return near_best, avg_rank, dist_table, nans_all, kl_div, kl_div_med, kl_div_rank
 
 
 def better_methods(method, result_folder, combined_with='mean', withnans=True, onlybts=True):
@@ -853,7 +863,7 @@ def separate_experiment_plots(result_folder='results', B=1000, reps=10000, showo
 if __name__ == '__main__':
     # folder_add = '_hierarchical'
     # folder_add = '_10000_reps'
-    folder_add = ''
+    folder_add = '_final'
     subfolder = ''
     # additional = 'hierarchical'
     additional = ''
@@ -869,14 +879,24 @@ if __name__ == '__main__':
     #                                    include_nan_repetitions=include_nans)
     # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    # for stat in ['mean', 'median']:
-    #     print('Aggregated with ', stat)
-    #
-    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
-    #                                              onlybts=False),
-    #                            ['near best', 'rank', 'distance', 'nans']):
-    #         print(name)
-    #         print(table.to_latex(float_format="%.2f"))
+    tables = {}
+    onlybts = True
+
+    for stat in ['mean', 'median']:
+        print('Aggregated with ', stat)
+
+        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+                                                 onlybts=onlybts),
+                               ['near best', 'rank', 'distance', 'nans', 'kl div', 'kl div med', 'kl div rank']):
+            print(name)
+            if 'rank' in name:
+                ff = "%.2f"
+            else:
+                ff = "%.4f"
+            print(table.to_latex(float_format=ff))
+            tables[name] = table
+
+    stop = True
 
     # print('BETTER:')
     # cov_bet, dist_bet = better_methods('double', f'results{folder_add}', combined_with=stat, withnans=True,
@@ -887,4 +907,4 @@ if __name__ == '__main__':
 
     # plot_times_line()
 
-    separate_experiment_plots('results', showoutliers=False)
+    # separate_experiment_plots('results', showoutliers=False)
