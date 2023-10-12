@@ -292,7 +292,7 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
 
 
 def analyze_experiments(method_one, other_methods=None, result_folder='results', B=1000, reps=10000, statistics=None,
-                        ns=None):
+                        ns=None, separate_dgp='coverage'):
 
     df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_d10_nonans.csv')
     # df_bad = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_prob']<0.1))]
@@ -339,8 +339,19 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
 
     results['distance'] = bad_s
 
-    for dgp in bad_both['dgp'].unique():
-        df_bad = bad_both[bad_both['dgp'] == dgp]
+    # choosing which results to observe when viewing separate dgp results
+    if separate_dgp == 'coverage':
+        bad_separate_dgp = df_bad_coverage
+        results_mag = pd.DataFrame(results[separate_dgp]['perc_better'])
+    elif separate_dgp == 'distance':
+        bad_separate_dgp = bad_dist
+        results_mag = pd.DataFrame(results[separate_dgp]['perc_better'])
+    else:
+        bad_separate_dgp = bad_both
+        results_mag = pd.DataFrame()
+
+    for dgp in bad_separate_dgp['dgp'].unique():
+        df_bad = bad_separate_dgp[bad_separate_dgp['dgp'] == dgp]
 
         bad_s = pd.DataFrame()
         bad_s['nr_better'] = df_bad[['method', 'stat']].value_counts()
@@ -358,9 +369,24 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
                                                                          (df_bad['stat'] == stat) &
                                                                          (df_bad['alpha'] == alpha)]['n'].unique()))
 
+            results_mag.loc[(method, stat), dgp] = bad_s.loc[(method, stat), 'perc_better']
+
         results[f'both_{dgp}'] = bad_s
 
+    #
+    results_mag = results_mag.reset_index()
+    results_mag = results_mag[results_mag.columns[[1, 0]].to_list() +
+                              [d for d in results_mag.columns[2:].to_list() if "BiNorm" not in d]]
+                              # + ["DGPBiNorm-1_1_2.0_0.5_1.0"]]     # skipping binorm because there is no >10% methods
+    results_mag = results_mag.sort_values(['stat', 'perc_better'], ascending=False)
+    results_mag[results_mag.columns[2:]] = results_mag[results_mag.columns[2:]] * 100
+
+    results[f'mag_{separate_dgp}'] = results_mag
+
     for name in results:
+        print(name)
+        if name[:3] == 'mag':
+            print(results[name].to_latex(index=False, float_format="%.2f").replace('NaN', ''))
         results[name].to_csv(f'results_better/{method_one}_{name}.csv')
 
 
@@ -368,20 +394,20 @@ if __name__ == '__main__':
 
     methods = ['standard']
 
-    for m in methods:
+    # for m in methods:
+    #
+    #     one_vs_others(m, B=1000, reps=10000)
+    #
+    #     table = pd.read_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10.csv')
+    #     t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
+    #     t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
+    #     t_nan.to_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
+    #
+    #     table = pd.read_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10.csv')
+    #     t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
+    #     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
+    #     t_nan.to_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
 
-        one_vs_others(m, B=1000, reps=10000)
-
-        table = pd.read_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10.csv')
-        t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
-        t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
-        t_nan.to_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
-
-        table = pd.read_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10.csv')
-        t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
-        t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
-        t_nan.to_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
-
-    analyze_experiments('standard', statistics=['percentile_5', 'percentile_95'])
+    analyze_experiments('double')
 
 
