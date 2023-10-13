@@ -124,7 +124,7 @@ def analyze_coverage_m1_false(coverage_m2, true_coverage):
 
 
 def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
-                  reps=10000):
+                  reps=10000, better_coef=1.5):
     if one_sided is None:
         one_sided = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
     if two_sided is None:
@@ -192,7 +192,7 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                     distance_m2 = abs(df_a[m2] - df_a['exact']).values
 
                     res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
-                    res_dist = analyze_length(distance_m1, distance_m2, 'dist')
+                    res_dist = analyze_length(distance_m1, distance_m2, 'dist', better_coef=better_coef)
 
                     nans2 = df_a[m2].isna().mean()
 
@@ -248,7 +248,7 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                     length_m2 = df_au[m2].values - df_al[m2].values
 
                     res_cov = analyze_coverage(covers_m1, covers_m2, alpha)
-                    res_len = analyze_length(length_m1, length_m2, 'len')
+                    res_len = analyze_length(length_m1, length_m2, 'len', better_coef=better_coef)
 
                     has_nans2 = df_al[m2].isna().any() or df_au[m2].isna().any()
 
@@ -261,11 +261,13 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
 
     final_df1 = pd.DataFrame(results_better1)
     final_df1.sort_values(by='better_prob_m2', ascending=False)
-    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_d10.csv', index=False)
+    final_df1.to_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_d{int((better_coef-1)*100)}.csv',
+                     index=False)
 
     final_df2 = pd.DataFrame(results_better2)
     final_df2.sort_values(by='better_prob_m2', ascending=False)
-    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_d10.csv', index=False)
+    final_df2.to_csv(f'{result_folder}/twosided_{method_one}_vs_others_B{B}_reps_{reps}_d{int((better_coef-1)*100)}.csv',
+                     index=False)
 
 
 def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
@@ -392,22 +394,23 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
 
 if __name__ == '__main__':
 
-    methods = ['standard']
+    methods = ['standard', 'double', 'studentized']
+    name = 'vs_others_B1000_reps_10000_d50'
 
-    # for m in methods:
-    #
-    #     one_vs_others(m, B=1000, reps=10000)
-    #
-    #     table = pd.read_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10.csv')
-    #     t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
-    #     t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
-    #     t_nan.to_csv(f'results/twosided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
-    #
-    #     table = pd.read_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10.csv')
-    #     t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
-    #     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
-    #     t_nan.to_csv(f'results/onesided_{m}_vs_others_B1000_reps_10000_d10_nonans.csv', index=False)
+    for m in methods:
 
-    analyze_experiments('double')
+        one_vs_others(m, B=1000, reps=10000)
+
+        table = pd.read_csv(f'results/twosided_{m}_{name}.csv')
+        t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
+        t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
+        t_nan.to_csv(f'results/twosided_{m}_{name}_nonans.csv', index=False)
+
+        table = pd.read_csv(f'results/onesided_{m}_{name}.csv')
+        t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
+        t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
+        t_nan.to_csv(f'results/onesided_{m}_{name}_nonans.csv', index=False)
+
+    # analyze_experiments('double')
 
 
