@@ -293,10 +293,10 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
     bad_ns = df_bad[['method', 'n', 'stat']].value_counts()
 
 
-def analyze_experiments(method_one, other_methods=None, result_folder='results', B=1000, reps=10000, statistics=None,
-                        ns=None, separate_dgp='coverage'):
+def analyze_experiments(method_one, name, other_methods=None, result_folder='results', statistics=None,
+                        ns=None, separate_dgp='coverage', sided='onesided'):
 
-    df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}_d10_nonans.csv')
+    df = pd.read_csv(f'{result_folder}/{sided}_{method_one}_{name}_nonans.csv')
     # df_bad = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_prob']<0.1))]
 
     if statistics is not None:
@@ -305,8 +305,10 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
     if ns is not None:
         df = df[df['n'].isin(ns)]
 
+    n2 ='dist' if sided == 'onesided' else 'len'
+
     df_bad_coverage = df[df['m2_better_kl']]
-    bad_both = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_m2']))]
+    bad_both = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df[f'better_{n2}_m2']))]
 
     print(f'There are {bad_both.shape[0]} cases where a method is better than {method_one}.'
           f'Out of them {bad_both[bad_both["m2_better_kl"]].shape[0]} have better coverage.')
@@ -325,21 +327,22 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
 
     results = {'coverage': bad_s}
 
-    bad_dist = df[(((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_m2']))]
+    bad_dist = df[(((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df[f'better_{n2}_m2']))]
 
-    bad_s = pd.DataFrame()
-    bad_s['nr_better'] = bad_dist[['method', 'stat']].value_counts()
-    bad_s['perc_better'] = bad_s['nr_better'] / df[['method', 'stat']].value_counts()
-    bad_s = bad_s.sort_values('perc_better', ascending=False)
-    for method, stat in bad_s.index:
-        # for alpha in sorted(df_bad['alpha'].unique()):
-        for dgp in sorted(bad_dist['dgp'].unique()):
-            bad_s.loc[(method, stat), dgp] = ', '.join(str(n) for n in
-                                                         sorted(bad_dist[(bad_dist['method'] == method) &
-                                                                       (bad_dist['stat'] == stat) &
-                                                                       (bad_dist['dgp'] == dgp)]['n'].unique()))
+    if bad_dist.shape[0] > 0:
+        bad_s = pd.DataFrame()
+        bad_s['nr_better'] = bad_dist[['method', 'stat']].value_counts()
+        bad_s['perc_better'] = bad_s['nr_better'] / df[['method', 'stat']].value_counts()
+        bad_s = bad_s.sort_values('perc_better', ascending=False)
+        for method, stat in bad_s.index:
+            # for alpha in sorted(df_bad['alpha'].unique()):
+            for dgp in sorted(bad_dist['dgp'].unique()):
+                bad_s.loc[(method, stat), dgp] = ', '.join(str(n) for n in
+                                                             sorted(bad_dist[(bad_dist['method'] == method) &
+                                                                           (bad_dist['stat'] == stat) &
+                                                                           (bad_dist['dgp'] == dgp)]['n'].unique()))
 
-    results['distance'] = bad_s
+        results['distance'] = bad_s
 
     # choosing which results to observe when viewing separate dgp results
     if separate_dgp == 'coverage':
@@ -385,11 +388,23 @@ def analyze_experiments(method_one, other_methods=None, result_folder='results',
 
     results[f'mag_{separate_dgp}'] = results_mag
 
+    mag_n = pd.DataFrame(df_bad_coverage.value_counts('n')/df.shape[0])
+    mag_n.columns = ['better coverage']
+    mag_n['equal coverage'] = df[((df['m2_better_kl'] + df['m1_better_kl']) < 1)].value_counts('n') / df.shape[0]
+    mag_n['better distance'] = bad_dist.value_counts('n')/df.shape[0]
+    mag_n['combined better'] = bad_both.value_counts('n')/df.shape[0]
+    results['mag_n'] = mag_n * 100
+
     for name in results:
         print(name)
         if name[:3] == 'mag':
+            # if name == 'mag_n':
+            #     print(results[name].sort_index().to_latex(float_format="%.2f", na_rep=0))
+            # else:
             print(results[name].to_latex(index=False, float_format="%.2f").replace('NaN', ''))
-        results[name].to_csv(f'results_better/{method_one}_{name}.csv')
+        results[name].to_csv(f'results_better/{method_one}_{name}_{sided}.csv')
+
+    return results
 
 
 if __name__ == '__main__':
@@ -397,20 +412,27 @@ if __name__ == '__main__':
     methods = ['standard', 'double', 'studentized']
     name = 'vs_others_B1000_reps_10000_d50'
 
-    for m in methods:
 
-        one_vs_others(m, B=1000, reps=10000)
+    # for m in methods:
+    #
+    #     one_vs_others(m, B=1000, reps=10000)
+    #
+    #     table = pd.read_csv(f'results/twosided_{m}_{name}.csv')
+    #     t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
+    #     t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
+    #     t_nan.to_csv(f'results/twosided_{m}_{name}_nonans.csv', index=False)
+    #
+    #     table = pd.read_csv(f'results/onesided_{m}_{name}.csv')
+    #     t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
+    #     t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
+    #     t_nan.to_csv(f'results/onesided_{m}_{name}_nonans.csv', index=False)
 
-        table = pd.read_csv(f'results/twosided_{m}_{name}.csv')
-        t_nan = table[(table['has_nans_m1'] == False) & (table['has_nans_m2'] == False)]
-        t_nan = t_nan.drop(columns=['has_nans_m1', 'has_nans_m2'])
-        t_nan.to_csv(f'results/twosided_{m}_{name}_nonans.csv', index=False)
+    # results for step 2 of analysis
+    rd = analyze_experiments('double', name=name, statistics=['mean', 'median', 'std', 'corr'], sided='twosided')
+    rs = analyze_experiments('standard', name=name, statistics=['percentile_5', 'percentile_95'], sided='twosided')
 
-        table = pd.read_csv(f'results/onesided_{m}_{name}.csv')
-        t_nan = table[(table['nan_perc_m1'] + table['nan_perc_m2']) == 0]
-        t_nan = t_nan.drop(columns=['nan_perc_m1', 'nan_perc_m2'])
-        t_nan.to_csv(f'results/onesided_{m}_{name}_nonans.csv', index=False)
-
-    # analyze_experiments('double')
+    # if you want to add latex table for percentage of better methods (n)
+    # merged_df = pd.concat([rd['mag_n'], rs['mag_n']], axis=1, keys=['double', 'standard'])
+    # print(merged_df.to_latex(float_format="%.2f", na_rep=0))
 
 
