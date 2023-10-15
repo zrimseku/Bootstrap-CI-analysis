@@ -59,7 +59,9 @@ def draw_bootstrap_comparison(dgps, ns, statistics, alphas=None, b=1000, methods
 
 
 def draw_length_comparison():
-    lengths = pd.read_csv('results_10000_reps/length.csv')
+    lengths = pd.read_csv('results/length.csv')
+    del lengths['ci_corr_spearman']     # WHY IS SPEARMAN EVEN HERE???
+
     for stat in lengths['statistic'].unique():
         for dgp in lengths['dgp'].unique():
             df = lengths[(lengths['statistic'] == stat) & (lengths['dgp'] == dgp)].dropna(axis=1, how='all')
