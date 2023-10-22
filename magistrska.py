@@ -11,7 +11,7 @@ from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGP
 
 def draw_bootstrap_comparison(dgps, ns, statistics, alphas=None, b=1000, methods=None, name=None):
 
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
     for dgp, n, statistic, ax in zip(dgps, ns, statistics, axes.flatten()):
         data = dgp.sample(sample_size=n)
@@ -35,12 +35,12 @@ def draw_bootstrap_comparison(dgps, ns, statistics, alphas=None, b=1000, methods
 
         # plotting
         colors = iter(plt.cm.jet(np.linspace(0.05, 0.95, len(methods))))
-        ax.hist(bts.statistic_values, bins=30, label='statistic')
+        ax.hist(bts.statistic_values, bins=30, label='bootstrap distribution')
         if 'smoothed' in methods:
             if np.nan in bts.statistic_values_noise or np.inf in bts.statistic_values_noise:
                 print('skipped drawing of smoothed values because of nan values.')  # TODO why are they here?
             else:
-                ax.hist(bts.statistic_values_noise, bins=30, label='smoothed stat.', alpha=0.3)
+                ax.hist(bts.statistic_values_noise, bins=30, label='smoothed boot. dist.', alpha=0.3)
         for method in methods:
             col = next(colors)
             for alpha in alphas:
@@ -52,9 +52,10 @@ def draw_bootstrap_comparison(dgps, ns, statistics, alphas=None, b=1000, methods
 
     plt.legend([], [], frameon=False)
     handles, labels = plt.gca().get_legend_handles_labels()
-    lgd = fig.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(0.9, 0.5))
+    lgd = fig.legend(handles, labels, loc='center left', bbox_to_anchor=(0.9, 0.5))
 
-    plt.savefig(f'magistrska/ci_comparison_{name}.png', bbox_inches='tight')
+    plt.savefig(f'magistrska/ci_comparison_{",".join([d.describe() for d in dgps])}_{",".join([str(n) for n in ns])}_'
+                f'{",".join([s.__name__ for s in statistics])}_{name}.png', bbox_inches='tight')
     plt.close()
 
 
@@ -71,18 +72,20 @@ def draw_length_comparison():
             if np.nanquantile(df_long['length'], 0.05) < 0:     # TEST
                 print(dgp, stat, np.nanquantile(df_long['length'], 0.05))
 
-            plot = sns.lineplot(data=df_long, x='n', y='length', hue='method')
+            plot = sns.lineplot(data=df_long, x='n', y='length', hue='method', palette='tab10')
             plot.set_xscale('log', base=2)
             plot.set_xticks(df_long['n'].unique())
             plot.set_xticklabels(df_long['n'].unique())
             plot.set_ylim(0, np.nanquantile(df_long['length'], 0.95))
+            # plt.show()
             plt.savefig(f'magistrska/length_comparison_{stat}_{dgp}.png', bbox_inches='tight')
             plt.close()
 
 
 if __name__ == '__main__':
-    ns = [8, 8, 8, 8]
-    dgps = [DGPNorm(0, 0, 1), DGPNorm(10, 0, 1), DGPNorm(20, 0, 1), DGPNorm(130, 0, 1)]
-    stats = [np.mean, np.mean, np.median, np.median]
-    # draw_bootstrap_comparison(dgps, ns, stats, name='test')
+    plt.style.use('seaborn')
+    ns = [128, 128, 8, 8]
+    dgps = [DGPNorm(100, 0, 1), DGPExp(100, 1), DGPNorm(20, 0, 1), DGPNorm(20, 0, 1)]
+    stats = [np.mean, np.std, np.mean, np.median]
+    # draw_bootstrap_comparison(dgps, ns, stats, name='2s100s20')
     draw_length_comparison()
