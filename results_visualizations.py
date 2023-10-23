@@ -859,6 +859,41 @@ def separate_experiment_plots(result_folder='results', B=1000, reps=10000, showo
                         bbox_extra_artists=(lgd, txt), bbox_inches='tight')
 
 
+def hierarchical_from_intervals(folder='results_hierarchical', bts_method='double', n_lvl=3, filenames=['intervals']):
+    # for wide tables (new results), skipping just replications that have nans
+    # we are reading results line by line because of possibility of very large dataframes that can't fit in memory
+
+    def analyse_line(line_str, line_keys, method):
+        line_dict = dict(zip(line_keys, line_str.strip('\n').split(',')))
+
+        if line_dict['method'] == 'exact':
+            # we don't need exact intervals in this study
+            return False
+
+        sampling, strategy, m = line_dict['method'].split('_')
+        if int(line_dict['B']) != 1000 or m != method or len(strategy) != n_lvl or line_dict['statistic'] != 'mean':
+            # skip the line, we are building each method's table separately, only for mean statistic
+            return False
+
+        line_dict['strategy'] = strategy
+        line_dict['method'] = method
+
+        return line_dict
+
+    df = pd.DataFrame()
+
+    for filename in filenames:
+        with open(f'{folder}/{filename}.csv') as f:
+            keys = f.readline().strip('\n').split(',')  # header
+            for line in f:
+                line_results = analyse_line(line, keys, bts_method)
+                if not line_results:
+                    # line_results == False
+                    continue
+                df = pd.concat([df, pd.Series(line_results).to_frame().T], ignore_index=True)
+
+    df.to_csv(f'{folder}/hierarchical_nlvl{n_lvl}_{bts_method}_.csv', index=False)
+
 
 if __name__ == '__main__':
     # folder_add = '_hierarchical'
@@ -879,24 +914,23 @@ if __name__ == '__main__':
     #                                    include_nan_repetitions=include_nans)
     # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    tables = {}
-    onlybts = True
+    # tables = {}
+    # onlybts = True
+    #
+    # for stat in ['mean', 'median']:
+    #     print('Aggregated with ', stat)
+    #
+    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+    #                                              onlybts=onlybts),
+    #                            ['near best', 'rank', 'distance', 'nans', 'kl div', 'kl div med', 'kl div rank']):
+    #         print(name)
+    #         if 'rank' in name:
+    #             ff = "%.2f"
+    #         else:
+    #             ff = "%.4f"
+    #         print(table.to_latex(float_format=ff))
+    #         tables[name] = table
 
-    for stat in ['mean', 'median']:
-        print('Aggregated with ', stat)
-
-        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
-                                                 onlybts=onlybts),
-                               ['near best', 'rank', 'distance', 'nans', 'kl div', 'kl div med', 'kl div rank']):
-            print(name)
-            if 'rank' in name:
-                ff = "%.2f"
-            else:
-                ff = "%.4f"
-            print(table.to_latex(float_format=ff))
-            tables[name] = table
-
-    stop = True
 
     # print('BETTER:')
     # cov_bet, dist_bet = better_methods('double', f'results{folder_add}', combined_with=stat, withnans=True,
@@ -908,3 +942,9 @@ if __name__ == '__main__':
     # plot_times_line()
 
     # separate_experiment_plots('results', showoutliers=False)
+
+    # hierarchical results separation
+    for levels in [2, 3, 4]:
+        for method in ['percentile', 'double', 'bca']:
+            hierarchical_from_intervals(folder='results_hierarchical', bts_method=method, n_lvl=levels,
+                                        filenames=['intervals'])
