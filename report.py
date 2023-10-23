@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 import seaborn as sns
+from results_visualizations import kl
 
 
 def draw_distributions():
@@ -71,6 +72,8 @@ def draw_bernoulli_se(r=10000, alphas=[0.025, 0.05, 0.25]):
     # Specify the red color for the additional ticks
     plt.yticks(yticks, yticklabels)
 
+    plt.rcParams['mathtext.fontset'] = 'cm'
+
     xticks = alphas + [0.5] + [1 - a for a in alphas[::-1]]
     xticksl = [0.05, 0.975]
     xticksr = [0.025, 0.95]
@@ -82,11 +85,35 @@ def draw_bernoulli_se(r=10000, alphas=[0.025, 0.05, 0.25]):
     tick_labels[-2].set_horizontalalignment('right')
     tick_labels[0].set_horizontalalignment('right')
 
-    plt.xlabel('p')
-    # plt.ylabel('standard error')
+    plt.xlabel(r'$p$')
+    plt.ylabel(r'Bernoulli $se$')
 
     # plt.xticks(alphas + [1 - a for a in alphas[::-1]])
     plt.savefig(f'magistrska/bernoulli_se.png')
+    plt.close()
+
+
+def draw_kl_se(r=10000, alphas=np.array([0.025, 0.05, 0.25])):
+    x = np.linspace(0, 1, 1000)
+
+    def se_kl(p, a):
+        return np.abs(np.log2(p*(1-a)) - np.log2(a*(1-p))) * (p * (1 - p) / r) ** 0.5
+
+    fig, ax = plt.subplots()
+
+    for alpha in alphas:
+        y = se_kl(x, alpha)
+        # plt.vlines(x=[alpha, 1 - alpha], color='gray', linestyle='--', ymin=0, ymax=se_bern(alpha))
+        ax.plot(kl(x, alpha), y, label=str(alpha) + ' / ' + str(1 - alpha))
+
+    plt.xlim(0, 1)
+    plt.xlabel(r'$D_{KL}(p, \alpha)$')
+    plt.ylabel(r'se of $D_{KL}(p, \alpha)$')
+    plt.legend(title=r'$\alpha$', loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+
+    # plt.xticks(alphas + [1 - a for a in alphas[::-1]])
+    plt.savefig(f'magistrska/kl_se.png')
     plt.close()
 
 
@@ -139,6 +166,6 @@ if __name__ == '__main__':
     # ggplot okej, whitegrid okej
     # sns.set_style('whitegrid')
     plt.style.use('seaborn')
-    draw_distributions()
-    draw_bernoulli_se()
-
+    # draw_distributions()
+    # draw_bernoulli_se()
+    draw_kl_se()
