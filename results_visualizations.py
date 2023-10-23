@@ -880,7 +880,7 @@ def hierarchical_from_intervals(folder='results_hierarchical', bts_method='doubl
 
         return line_dict
 
-    df = pd.DataFrame()
+    results = []
 
     for filename in filenames:
         with open(f'{folder}/{filename}.csv') as f:
@@ -890,8 +890,10 @@ def hierarchical_from_intervals(folder='results_hierarchical', bts_method='doubl
                 if not line_results:
                     # line_results == False
                     continue
-                df = pd.concat([df, pd.Series(line_results).to_frame().T], ignore_index=True)
+                results.append(line_results)
+                # df = pd.concat([df, pd.Series(line_results).to_frame().T], ignore_index=True)
 
+    df = pd.DataFrame(results)
     df.to_csv(f'{folder}/hierarchical_nlvl{n_lvl}_{bts_method}_.csv', index=False)
 
 
@@ -902,7 +904,7 @@ if __name__ == '__main__':
     subfolder = ''
     # additional = 'hierarchical'
     additional = ''
-    cov = pd.read_csv(f'results{folder_add}/coverage.csv')
+    # cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
 
     # main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, set_ylim=True)
@@ -945,6 +947,7 @@ if __name__ == '__main__':
 
     # hierarchical results separation
     for levels in [2, 3, 4]:
-        for method in ['percentile', 'double', 'bca']:
+        for method in ['double', 'percentile', 'bca']:
+            print(method, levels)
             hierarchical_from_intervals(folder='results_hierarchical', bts_method=method, n_lvl=levels,
-                                        filenames=['intervals'])
+                                        filenames=['intervals_first550experiments', 'intervals'])
