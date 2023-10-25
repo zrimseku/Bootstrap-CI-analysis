@@ -355,78 +355,26 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
     results['rank_kl'] = results[['alpha', 'kl_div', 'dgp', 'statistic', 'n']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).rank()
 
+    def agregate_n_stat(df, column, fun, asc=True):
+        agg = fun(df[['method', column]].groupby(['method']))
+
+        agg_n = fun(results[['method', column, 'n']].groupby(['method', 'n'])).unstack()
+        agg_n.columns = agg_n.columns.droplevel()
+        agg = agg.join(agg_n)
+
+        agg_stat = fun(results[['method', column, 'statistic']].groupby(['method', 'statistic'])).unstack()
+        agg_stat.columns = agg_stat.columns.droplevel()
+        agg = agg.join(agg_stat).sort_values(by=column, ascending=asc)
+
+        return agg
+
     # tables
-    near_best = results[['method', 'near_best']].groupby(['method']).sum()
+    # first comparison by near best in avg rank, distance, nans
+    near_best = agregate_n_stat(results, 'near_best', lambda x: x.sum(), asc=False)
+    avg_rank = agregate_n_stat(results, 'rank', lambda x: x.mean())
 
-    near_best_n = results[['method', 'near_best', 'n']].groupby(['method', 'n']).sum().unstack()
-    near_best_n.columns = near_best_n.columns.droplevel()
-    near_best = near_best.join(near_best_n)
-
-    near_best_stat = results[['method', 'near_best', 'statistic']].groupby(['method', 'statistic']).sum().unstack()
-    near_best_stat.columns = near_best_stat.columns.droplevel()
-    near_best = near_best.join(near_best_stat).sort_values(by='near_best', ascending=False)
-
-    avg_rank = results[['method', 'rank']].groupby(['method']).mean()
-
-    avg_rank_n = results[['method', 'rank', 'n']].groupby(['method', 'n']).mean().unstack()
-    avg_rank_n.columns = avg_rank_n.columns.droplevel()
-    avg_rank = avg_rank.join(avg_rank_n)
-
-    avg_rank_stat = results[['method', 'rank', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
-    avg_rank_stat.columns = avg_rank_stat.columns.droplevel()
-    avg_rank = avg_rank.join(avg_rank_stat).sort_values(by='rank')
-
-    kl_div = results[['method', 'kl_div']].groupby(['method']).mean()
-
-    kl_div_n = results[['method', 'kl_div', 'n']].groupby(['method', 'n']).mean().unstack()
-    kl_div_n.columns = kl_div_n.columns.droplevel()
-    kl_div = kl_div.join(kl_div_n)
-
-    kl_div_stat = results[['method', 'kl_div', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
-    kl_div_stat.columns = kl_div_stat.columns.droplevel()
-    kl_div = kl_div.join(kl_div_stat).sort_values(by='kl_div')
-
-    kl_div_med = results[['method', 'kl_div']].groupby(['method']).median()
-
-    kl_div_n_med = results[['method', 'kl_div', 'n']].groupby(['method', 'n']).median().unstack()
-    kl_div_n_med.columns = kl_div_n_med.columns.droplevel()
-    kl_div_med = kl_div_med.join(kl_div_n_med)
-
-    kl_div_stat_med = results[['method', 'kl_div', 'statistic']].groupby(['method', 'statistic']).median().unstack()
-    kl_div_stat_med.columns = kl_div_stat_med.columns.droplevel()
-    kl_div_med = kl_div_med.join(kl_div_stat_med).sort_values(by='kl_div')
-
-    kl_div_rank = results[['method', 'rank_kl']].groupby(['method']).mean()
-
-    kl_div_rank_n = results[['method', 'rank_kl', 'n']].groupby(['method', 'n']).mean().unstack()
-    kl_div_rank_n.columns = kl_div_rank_n.columns.droplevel()
-    kl_div_rank = kl_div_rank.join(kl_div_rank_n)
-
-    kl_div_rank_stat = results[['method', 'rank_kl', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
-    kl_div_rank_stat.columns = kl_div_rank_stat.columns.droplevel()
-    kl_div_rank = kl_div_rank.join(kl_div_rank_stat).sort_values(by='rank_kl')
-
-    dist_table = results[['method', 'avg_distance']].groupby(['method']).median()
-
-    dist_table_n = results[['method', 'avg_distance', 'n']].groupby(['method', 'n']).median().unstack()
-    dist_table_n.columns = dist_table_n.columns.droplevel()
-    dist_table = dist_table.join(dist_table_n)
-
-    dist_table_stat = results[['method', 'avg_distance', 'statistic']] \
-        .groupby(['method', 'statistic']).median().unstack()
-    dist_table_stat.columns = dist_table_stat.columns.droplevel()
-    dist_table = dist_table.join(dist_table_stat).sort_values(by='avg_distance')
-
-    # nans
-    nans = results[['method', 'nans']].groupby(['method']).mean()
-
-    nans_n = results[['method', 'nans', 'n']].groupby(['method', 'n']).mean().unstack()
-    nans_n.columns = nans_n.columns.droplevel()
-    nans = nans.join(nans_n)
-
-    nans_stat = results[['method', 'nans', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
-    nans_stat.columns = nans_stat.columns.droplevel()
-    nans = nans.join(nans_stat)
+    dist_table = agregate_n_stat(results, 'avg_distance', lambda x: x.median())
+    nans = agregate_n_stat(results, 'nans', lambda x: x.mean())
 
     nans_a = results[['method', 'nans', 'alpha']].groupby(['method', 'alpha']).mean().unstack()
     nans_a.columns = nans_a.columns.droplevel()
@@ -456,7 +404,27 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
 
     # t = results[results['method'].isin(['double', 'standard'])] for finding experiment for histogram
 
-    return near_best, avg_rank, dist_table, nans_all, kl_div, kl_div_med, kl_div_rank
+    # current comparison by kl div
+    kl_div = agregate_n_stat(results, 'kl_div', lambda x: x.mean())
+    kl_div_se = agregate_n_stat(results, 'kl_div', lambda x: x.sem())
+    kl_div_med = agregate_n_stat(results, 'kl_div', lambda x: x.median())
+    kl_div_rank = agregate_n_stat(results, 'rank_kl', lambda x: x.mean())
+    kl_rank_se = agregate_n_stat(results, 'rank_kl', lambda x: x.sem())
+
+    def significantly_worse(df, se_df, values=False):
+        # subtracting method differences and standard errors, to know which are significantly worse (positive ones)
+        idx_min = df.idxmin()
+        df_significant = df - df.min() - se_df
+        for col in df_significant.columns:
+            # subtracting se of the best method
+            df_significant[col] -= kl_div_se.loc[idx_min[col], col]
+        df_significant = df_significant.loc[df.index, :]
+        return df_significant if values else df_significant >= 0
+
+    kl_div_significant = significantly_worse(kl_div, kl_div_se, True)
+    kl_rank_significant = significantly_worse(kl_div_rank, kl_rank_se, True)
+
+    return near_best, avg_rank, dist_table, nans_all, kl_div, kl_div_med, kl_div_rank, kl_div_se, kl_rank_se
 
 
 def better_methods(method, result_folder, combined_with='mean', withnans=True, onlybts=True):
@@ -1013,22 +981,24 @@ if __name__ == '__main__':
     #                                    include_nan_repetitions=include_nans)
     # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    # tables = {}
-    # onlybts = True
-    #
-    # for stat in ['mean', 'median']:
-    #     print('Aggregated with ', stat)
-    #
-    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
-    #                                              onlybts=onlybts),
-    #                            ['near best', 'rank', 'distance', 'nans', 'kl div', 'kl div med', 'kl div rank']):
-    #         print(name)
-    #         if 'rank' in name:
-    #             ff = "%.2f"
-    #         else:
-    #             ff = "%.4f"
-    #         print(table.to_latex(float_format=ff))
-    #         tables[name] = table
+    tables = {}
+    onlybts = True
+
+    for stat in ['mean', 'median']:
+        print('Aggregated with ', stat)
+
+        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+                                                 onlybts=onlybts),
+                               ['near best', 'rank', 'distance', 'nans', 'kl div', 'kl div med', 'kl div rank',
+
+                               'kl div se', 'kl rank se']):
+            print(name)
+            if 'rank' in name:
+                ff = "%.2f"
+            else:
+                ff = "%.4f"
+            print(table.to_latex(float_format=ff))
+            tables[name] = table
 
 
     # print('BETTER:')
@@ -1049,5 +1019,6 @@ if __name__ == '__main__':
     #         hierarchical_from_intervals(folder='results_hierarchical', bts_method=method, n_lvl=levels,
     #                                     filenames=['intervals_first550experiments', 'intervals'])
 
-    separate_experiment_plots_hierarchical()
+    # plots for hierarchical experiments
+    # separate_experiment_plots_hierarchical()
 
