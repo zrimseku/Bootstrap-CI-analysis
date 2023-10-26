@@ -894,7 +894,7 @@ def hierarchical_from_intervals(folder='results_hierarchical', bts_method='doubl
                 # df = pd.concat([df, pd.Series(line_results).to_frame().T], ignore_index=True)
 
     df = pd.DataFrame(results)
-    df.to_csv(f'{folder}/hierarchical_nlvl{n_lvl}_{bts_method}_.csv', index=False)
+    df.to_csv(f'{folder}/hierarchical_nlvl{n_lvl}_{bts_method}.csv', index=False)
 
 
 if __name__ == '__main__':
