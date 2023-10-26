@@ -886,7 +886,7 @@ def hierarchical_from_intervals(folder='results_hierarchical', bts_method='doubl
                 # df = pd.concat([df, pd.Series(line_results).to_frame().T], ignore_index=True)
 
     df = pd.DataFrame(results)
-    df.to_csv(f'{folder}/hierarchical_nlvl{n_lvl}_{bts_method}_.csv', index=False)
+    df.to_csv(f'{folder}/hierarchical_nlvl{n_lvl}_{bts_method}.csv', index=False)
 
 
 def separate_experiment_plots_hierarchical(result_folder='results_hierarchical', B=1000, reps=1000, std=1,
