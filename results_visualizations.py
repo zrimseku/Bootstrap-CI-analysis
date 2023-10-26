@@ -321,7 +321,7 @@ def kl(p, q):
     return part1 + part2
 
 
-def aggregate_results(result_folder, methods=None, combined_with='mean', withnans=True, onlybts=True):
+def aggregate_results(result_folder, methods=None, combined_with='mean', withnans=True, onlybts=True, r=10000):
     # reading and filtering coverage table
     results = pd.read_csv(f'{result_folder}/results_from_intervals_{combined_with}{["", "_bts"][int(onlybts)]}'
                           f'{["", "_withnans"][int(withnans)]}.csv')
@@ -411,20 +411,43 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
     kl_div_rank = agregate_n_stat(results, 'rank_kl', lambda x: x.mean())
     kl_rank_se = agregate_n_stat(results, 'rank_kl', lambda x: x.sem())
 
-    def significantly_worse(df, se_df, values=False):
+    def significantly_worse(df, se_df, values=False, experiment_se=None):
         # subtracting method differences and standard errors, to know which are significantly worse (positive ones)
         idx_min = df.idxmin()
         df_significant = df - df.min() - se_df
         for col in df_significant.columns:
             # subtracting se of the best method
-            df_significant[col] -= kl_div_se.loc[idx_min[col], col]
+            df_significant[col] -= se_df.loc[idx_min[col], col]
         df_significant = df_significant.loc[df.index, :]
-        return df_significant if values else df_significant >= 0
 
-    kl_div_significant = significantly_worse(kl_div, kl_div_se, True)
-    kl_rank_significant = significantly_worse(kl_div_rank, kl_rank_se, True)
+        # checking if each separate experiment has too big standard error
+        if experiment_se == 'kl':
+            # for kl estimation (computed by delta method, upper limit at alpha 0.025)
+            # ERROR we are doing se_kl(kl(p), a), not se_kl(p, a), cant get p from kl
+            # can we get
+            def se_kl(p, a):
+                fst_order = np.abs(np.log2(p * (1 - a)) - np.log2(a * (1 - p))) * (p * (1 - p) / r) ** 0.5
+                return fst_order
 
-    return near_best, avg_rank, dist_table, nans_all, kl_div, kl_div_med, kl_div_rank, kl_div_se, kl_rank_se
+            # additional_se = se_kl(df.min(), 0.025) + se_kl(df, 0.025)   ERROR
+            additional_se = 0
+
+        elif experiment_se == 'rank':
+            # for rank estimation, conservative estimation by each method taking max variability
+            max_sd = np.sqrt(r/(r-1) * ((df_significant.shape[0] - 1) / 2)**2)
+            additional_se = max_sd / np.sqrt(r) * 2
+
+        else:
+            additional_se = 0
+
+        df_sig_each_exp = df_significant - additional_se
+
+        return df_sig_each_exp if values else (df_sig_each_exp >= 0)
+
+    kl_div_significant = significantly_worse(kl_div, kl_div_se, experiment_se='kl')
+    kl_rank_significant = significantly_worse(kl_div_rank, kl_rank_se, experiment_se='rank')
+
+    return nans_all, kl_div, kl_div_med, kl_div_rank, kl_div_se, kl_rank_se, kl_div_significant, kl_rank_significant
 
 
 def better_methods(method, result_folder, combined_with='mean', withnans=True, onlybts=True):
@@ -981,24 +1004,23 @@ if __name__ == '__main__':
     #                                    include_nan_repetitions=include_nans)
     # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    tables = {}
-    onlybts = True
-
-    for stat in ['mean', 'median']:
-        print('Aggregated with ', stat)
-
-        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
-                                                 onlybts=onlybts),
-                               ['near best', 'rank', 'distance', 'nans', 'kl div', 'kl div med', 'kl div rank',
-
-                               'kl div se', 'kl rank se']):
-            print(name)
-            if 'rank' in name:
-                ff = "%.2f"
-            else:
-                ff = "%.4f"
-            print(table.to_latex(float_format=ff))
-            tables[name] = table
+    # tables = {}
+    # onlybts = True
+    #
+    # for stat in ['mean', 'median']:
+    #     print('Aggregated with ', stat)
+    #
+    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+    #                                              onlybts=onlybts),
+    #                            ['nans', 'kl div', 'kl div med', 'kl div rank',
+    #                            'kl div se', 'kl rank se', 'kl_div_significant', 'kl_rank_significant']):
+    #         print(name)
+    #         if 'rank' in name:
+    #             ff = "%.2f"
+    #         else:
+    #             ff = "%.4f"
+    #         print(table.to_latex(float_format=ff))
+    #         tables[name] = table
 
 
     # print('BETTER:')
@@ -1008,7 +1030,7 @@ if __name__ == '__main__':
 
     # better_methods_repetition_level('double', 'results_wide_nans')
 
-    # plot_times_line()
+    plot_times_line()
 
     # separate_experiment_plots('results', showoutliers=False)
 
