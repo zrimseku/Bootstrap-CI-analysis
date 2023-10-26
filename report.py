@@ -93,27 +93,34 @@ def draw_bernoulli_se(r=10000, alphas=[0.025, 0.05, 0.25]):
     plt.close()
 
 
-def draw_kl_se(r=10000, alphas=np.array([0.025, 0.05, 0.25])):
+def draw_kl_se(r=10000, xval='kl', scales='log'):
     x = np.linspace(0, 1, 1000)
 
     def se_kl(p, a):
-        return np.abs(np.log2(p*(1-a)) - np.log2(a*(1-p))) * (p * (1 - p) / r) ** 0.5
+        fst_order = np.abs(np.log2(p*(1-a)) - np.log2(a*(1-p))) * (p * (1 - p) / r) ** 0.5
+        # snd_order = np.abs((1 - 2*p) / (np.log(2) * p * (1 - p))) * (p * (1 - p) / r) / 2
+        return fst_order
 
     fig, ax = plt.subplots()
+
+    alphas = np.array([0.025, 0.05, 0.25] + ([] if xval == 'kl' else [0.75, 0.95, 0.975]))
 
     for alpha in alphas:
         y = se_kl(x, alpha)
         # plt.vlines(x=[alpha, 1 - alpha], color='gray', linestyle='--', ymin=0, ymax=se_bern(alpha))
-        ax.plot(kl(x, alpha), y, label=str(alpha) + ' / ' + str(1 - alpha))
+        ax.plot(kl(x, alpha) if xval == 'kl' else x, y,
+                label=(str(alpha) + ' / ' + str(1 - alpha)) if xval == 'kl' else alpha)
 
-    plt.xlim(0, 1)
-    plt.xlabel(r'$D_{KL}(p, \alpha)$')
+    # plt.xlim(0, 1)
+    plt.xlabel(r'$D_{KL}(p, \alpha)$' if xval == 'kl' else r'$p$')
     plt.ylabel(r'se of $D_{KL}(p, \alpha)$')
+    plt.xscale(scales)
+    plt.yscale(scales)
     plt.legend(title=r'$\alpha$', loc='upper left', bbox_to_anchor=(1, 1))
     plt.tight_layout()
 
     # plt.xticks(alphas + [1 - a for a in alphas[::-1]])
-    plt.savefig(f'magistrska/kl_se.png')
+    plt.savefig(f'magistrska/kl_se_{xval}_{scales}.png')
     plt.close()
 
 
@@ -168,4 +175,5 @@ if __name__ == '__main__':
     plt.style.use('seaborn')
     # draw_distributions()
     # draw_bernoulli_se()
-    draw_kl_se()
+    draw_kl_se(xval='p', scales='linear')
+    draw_kl_se(scales='linear')
