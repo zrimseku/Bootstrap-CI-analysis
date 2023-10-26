@@ -125,10 +125,16 @@ def plot_coverage_bars(data, **kwargs):
     colors = kwargs['colors']
     ci = kwargs['ci']
     scale = kwargs['scale']
-    data['ci'] = np.sqrt(data['coverage'] * (1 - data['coverage']) / data['repetitions'])
+
+    if 'cov_kind' in kwargs:                # for the possibility of plotting variance coverage with it
+        cov_kind = kwargs['cov_kind']
+    else:
+        cov_kind = 'coverage'
+
+    data['ci'] = np.sqrt(data[cov_kind] * (1 - data[cov_kind]) / data['repetitions'])
     if ci != 'se':
         data['ci'] *= scipy.stats.norm.ppf(0.5 + ci / 200)
-    data['low'] = data['coverage'] - data['ci']
+    data['low'] = data[cov_kind] - data['ci']
 
     n_levels = len(kwargs['order'])
     group_width = 0.8
@@ -142,7 +148,7 @@ def plot_coverage_bars(data, **kwargs):
         offset = bar_pos + offsets[i]
         # if data_m['ci'].shape[0] == 0:
         #     continue
-        plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['coverage'], label=method, color=colors[method],
+        plt.bar(offset, data_m['ci'], bar_width, bottom=data_m[cov_kind], label=method, color=colors[method],
                 ec=colors[method])
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['low'], color=colors[method], ec=colors[method])
         # TODO a rabmo še črtico dodatno?
@@ -172,7 +178,7 @@ def plot_coverage_bars(data, **kwargs):
     plt.yticks(list(plt.yticks()[0]) + [a])
 
     ax.set_xlabel(kwargs['x'])
-    ax.set_ylabel('coverage')
+    ax.set_ylabel(cov_kind)
     plt.xticks(bar_pos, sorted(data[kwargs['x']].unique()))
 
 
@@ -349,78 +355,26 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
     results['rank_kl'] = results[['alpha', 'kl_div', 'dgp', 'statistic', 'n']].groupby(
         ['alpha', 'dgp', 'statistic', 'n']).rank()
 
+    def agregate_n_stat(df, column, fun, asc=True):
+        agg = fun(df[['method', column]].groupby(['method']))
+
+        agg_n = fun(results[['method', column, 'n']].groupby(['method', 'n'])).unstack()
+        agg_n.columns = agg_n.columns.droplevel()
+        agg = agg.join(agg_n)
+
+        agg_stat = fun(results[['method', column, 'statistic']].groupby(['method', 'statistic'])).unstack()
+        agg_stat.columns = agg_stat.columns.droplevel()
+        agg = agg.join(agg_stat).sort_values(by=column, ascending=asc)
+
+        return agg
+
     # tables
-    near_best = results[['method', 'near_best']].groupby(['method']).sum()
+    # first comparison by near best in avg rank, distance, nans
+    near_best = agregate_n_stat(results, 'near_best', lambda x: x.sum(), asc=False)
+    avg_rank = agregate_n_stat(results, 'rank', lambda x: x.mean())
 
-    near_best_n = results[['method', 'near_best', 'n']].groupby(['method', 'n']).sum().unstack()
-    near_best_n.columns = near_best_n.columns.droplevel()
-    near_best = near_best.join(near_best_n)
-
-    near_best_stat = results[['method', 'near_best', 'statistic']].groupby(['method', 'statistic']).sum().unstack()
-    near_best_stat.columns = near_best_stat.columns.droplevel()
-    near_best = near_best.join(near_best_stat).sort_values(by='near_best', ascending=False)
-
-    avg_rank = results[['method', 'rank']].groupby(['method']).mean()
-
-    avg_rank_n = results[['method', 'rank', 'n']].groupby(['method', 'n']).mean().unstack()
-    avg_rank_n.columns = avg_rank_n.columns.droplevel()
-    avg_rank = avg_rank.join(avg_rank_n)
-
-    avg_rank_stat = results[['method', 'rank', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
-    avg_rank_stat.columns = avg_rank_stat.columns.droplevel()
-    avg_rank = avg_rank.join(avg_rank_stat).sort_values(by='rank')
-
-    kl_div = results[['method', 'kl_div']].groupby(['method']).mean()
-
-    kl_div_n = results[['method', 'kl_div', 'n']].groupby(['method', 'n']).mean().unstack()
-    kl_div_n.columns = kl_div_n.columns.droplevel()
-    kl_div = kl_div.join(kl_div_n)
-
-    kl_div_stat = results[['method', 'kl_div', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
-    kl_div_stat.columns = kl_div_stat.columns.droplevel()
-    kl_div = kl_div.join(kl_div_stat).sort_values(by='kl_div')
-
-    kl_div_med = results[['method', 'kl_div']].groupby(['method']).median()
-
-    kl_div_n_med = results[['method', 'kl_div', 'n']].groupby(['method', 'n']).median().unstack()
-    kl_div_n_med.columns = kl_div_n_med.columns.droplevel()
-    kl_div_med = kl_div_med.join(kl_div_n_med)
-
-    kl_div_stat_med = results[['method', 'kl_div', 'statistic']].groupby(['method', 'statistic']).median().unstack()
-    kl_div_stat_med.columns = kl_div_stat_med.columns.droplevel()
-    kl_div_med = kl_div_med.join(kl_div_stat_med).sort_values(by='kl_div')
-
-    kl_div_rank = results[['method', 'rank_kl']].groupby(['method']).mean()
-
-    kl_div_rank_n = results[['method', 'rank_kl', 'n']].groupby(['method', 'n']).mean().unstack()
-    kl_div_rank_n.columns = kl_div_rank_n.columns.droplevel()
-    kl_div_rank = kl_div_rank.join(kl_div_rank_n)
-
-    kl_div_rank_stat = results[['method', 'rank_kl', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
-    kl_div_rank_stat.columns = kl_div_rank_stat.columns.droplevel()
-    kl_div_rank = kl_div_rank.join(kl_div_rank_stat).sort_values(by='rank_kl')
-
-    dist_table = results[['method', 'avg_distance']].groupby(['method']).median()
-
-    dist_table_n = results[['method', 'avg_distance', 'n']].groupby(['method', 'n']).median().unstack()
-    dist_table_n.columns = dist_table_n.columns.droplevel()
-    dist_table = dist_table.join(dist_table_n)
-
-    dist_table_stat = results[['method', 'avg_distance', 'statistic']] \
-        .groupby(['method', 'statistic']).median().unstack()
-    dist_table_stat.columns = dist_table_stat.columns.droplevel()
-    dist_table = dist_table.join(dist_table_stat).sort_values(by='avg_distance')
-
-    # nans
-    nans = results[['method', 'nans']].groupby(['method']).mean()
-
-    nans_n = results[['method', 'nans', 'n']].groupby(['method', 'n']).mean().unstack()
-    nans_n.columns = nans_n.columns.droplevel()
-    nans = nans.join(nans_n)
-
-    nans_stat = results[['method', 'nans', 'statistic']].groupby(['method', 'statistic']).mean().unstack()
-    nans_stat.columns = nans_stat.columns.droplevel()
-    nans = nans.join(nans_stat)
+    dist_table = agregate_n_stat(results, 'avg_distance', lambda x: x.median())
+    nans = agregate_n_stat(results, 'nans', lambda x: x.mean())
 
     nans_a = results[['method', 'nans', 'alpha']].groupby(['method', 'alpha']).mean().unstack()
     nans_a.columns = nans_a.columns.droplevel()
@@ -450,7 +404,27 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
 
     # t = results[results['method'].isin(['double', 'standard'])] for finding experiment for histogram
 
-    return near_best, avg_rank, dist_table, nans_all, kl_div, kl_div_med, kl_div_rank
+    # current comparison by kl div
+    kl_div = agregate_n_stat(results, 'kl_div', lambda x: x.mean())
+    kl_div_se = agregate_n_stat(results, 'kl_div', lambda x: x.sem())
+    kl_div_med = agregate_n_stat(results, 'kl_div', lambda x: x.median())
+    kl_div_rank = agregate_n_stat(results, 'rank_kl', lambda x: x.mean())
+    kl_rank_se = agregate_n_stat(results, 'rank_kl', lambda x: x.sem())
+
+    def significantly_worse(df, se_df, values=False):
+        # subtracting method differences and standard errors, to know which are significantly worse (positive ones)
+        idx_min = df.idxmin()
+        df_significant = df - df.min() - se_df
+        for col in df_significant.columns:
+            # subtracting se of the best method
+            df_significant[col] -= kl_div_se.loc[idx_min[col], col]
+        df_significant = df_significant.loc[df.index, :]
+        return df_significant if values else df_significant >= 0
+
+    kl_div_significant = significantly_worse(kl_div, kl_div_se, True)
+    kl_rank_significant = significantly_worse(kl_div_rank, kl_rank_se, True)
+
+    return near_best, avg_rank, dist_table, nans_all, kl_div, kl_div_med, kl_div_rank, kl_div_se, kl_rank_se
 
 
 def better_methods(method, result_folder, combined_with='mean', withnans=True, onlybts=True):
@@ -793,11 +767,6 @@ def separate_experiment_plots(result_folder='results', B=1000, reps=10000, showo
             df_whole.rename(columns={'CI': 'alpha'}, inplace=True)
 
         for [dgp, stat, alpha], df in df_whole.groupby(['dgp', 'statistic', 'alpha']):
-            # i += 1
-            # if i == 3:
-            #     # TODO Delete
-            #     break
-
             # plotting coverage
             au = alpha if sided == 'onesided' else 0.5 + alpha / 2
             cov_df = coverages[(coverages['dgp'] == dgp) & (coverages['statistic'] == stat) &
@@ -855,7 +824,7 @@ def separate_experiment_plots(result_folder='results', B=1000, reps=10000, showo
             lgd = fig.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(1, 0.5))
 
             plt.savefig(f'images/separate_experiments_{sided}{["", "_outliers"][int(showoutliers)]}/'
-                        f'plots_{sided}_experiment_{dgp}_{stat}_{sided}_{alpha}.png',
+                        f'plots_{sided}_experiment_{dgp}_{stat}_{alpha}.png',
                         bbox_extra_artists=(lgd, txt), bbox_inches='tight')
 
 
@@ -897,6 +866,102 @@ def hierarchical_from_intervals(folder='results_hierarchical', bts_method='doubl
     df.to_csv(f'{folder}/hierarchical_nlvl{n_lvl}_{bts_method}.csv', index=False)
 
 
+def separate_experiment_plots_hierarchical(result_folder='results_hierarchical', B=1000, reps=1000, std=1,
+                                           method='double'):
+    coverages = pd.read_csv(f'{result_folder}/coverage.csv')
+    repetitions = {}
+    nlvls = [2, 3, 4]
+    for nlvl in nlvls:
+        rdf = pd.read_csv(f'{result_folder}/hierarchical_nlvl{nlvl}_{method}.csv')
+        repetitions[nlvl] = rdf[(rdf['B'] == B) & (rdf['repetitions'] == reps)]
+
+    coverages = coverages[(coverages['B'] == B) & (coverages['repetitions'] == reps) & (coverages['std'] == std)
+                          & (coverages['method'].str.split('_').str[2] == method) & (coverages['statistic'] == 'mean')]
+    coverages['strategy'] = coverages['method'].str.split('_').str[1]
+    coverages_a95 = coverages[(coverages['alpha'] == 0.95)]     # hack for variance coverage (always checking 95CI)
+
+    for alpha in coverages['alpha'].unique():
+
+        cov_df = coverages[(coverages['alpha'] == alpha)]
+
+        fig = plt.figure(figsize=(10, 14), constrained_layout=True)
+        # txt = fig.suptitle(f"Coverage and variance coverage for std {std}, {method}", fontsize=14)
+        lgds = []
+
+        for i, nlvl in enumerate(nlvls):
+            cov_lvl_df = cov_df[cov_df['levels'] == nlvl]
+            cov_lvl_95 = coverages_a95[coverages_a95['levels'] == nlvl]
+
+            nm = cov_lvl_df['strategy'].nunique()
+            if nm > 10:
+                cols = plt.cm.tab20(np.linspace(0.05, 0.95, cov_lvl_df['strategy'].nunique()))
+            else:
+                cols = plt.cm.tab10(np.linspace(0.05, 0.95, cov_lvl_df['strategy'].nunique()))
+            colors = {m: c for (m, c) in zip(cov_lvl_df['strategy'].unique(), cols)}
+            order = cov_lvl_df['strategy'].unique()
+
+            plt.subplot(3, 2, 2 * i + 1)
+            plot_coverage_bars(cov_lvl_df, colors=colors, ci=95, scale='linear', set_ylim=False, order=order,
+                               hue='strategy', x='n')
+            if i == 0:
+                plt.title('Accuracy')
+            if i != 2:
+                plt.xlabel('')
+
+            plt.xticks(plt.xticks()[0], plt.xticks()[1], rotation=45)
+            plt.ylim(max(plt.ylim()[0], 0), min(plt.ylim()[1], 1))
+
+            # plotting boxplots of variance estimations
+            # plt.subplot(3, 3, 4 + i)
+            # # plt.title('Variance estimation')
+            # rep_df = repetitions[nlvl]
+            # rep_df = rep_df[rep_df['alpha'] == alpha]
+            # sns.boxplot(x="n", y='mean_var', hue="strategy", data=rep_df, hue_order=order, palette=colors,
+            #             showfliers=True)
+            # plt.axhline(y=rep_df['gt_variance'].values[0], color="gray", linestyle="--")
+            # # plt.yticks(list(plt.yticks()[0]) + [0])
+            # plt.legend([], [], frameon=False)
+
+            # # just check
+            # if rep_df['gt_variance'].mean() != rep_df['gt_variance'].values[0]:
+            #     print('variances not equal')
+
+            # plotting distances
+            ax = plt.subplot(3, 2, 2 * i + 2)
+            plot_coverage_bars(cov_lvl_95, colors=colors, ci=95, scale='linear', set_ylim=False, order=order,
+                               hue='strategy', x='n', cov_kind='var_coverage')
+            handles, labels = ax.get_legend_handles_labels()
+            lgds.append(fig.legend(handles, labels, loc='center left', title="Strategy", bbox_to_anchor=(1, (5-2*i)/6)))
+            if i == 0:
+                plt.title("Imitation of DGP's Variation Properties")
+            if i != 2:
+                plt.xlabel('')
+
+            plt.xticks(plt.xticks()[0], plt.xticks()[1], rotation=45)
+            plt.ylim(max(plt.ylim()[0], 0), min(plt.ylim()[1], 1))
+
+        # handles, labels = plt.gca().get_legend_handles_labels()
+        # lgd1 = fig.legend(handles, labels, loc='center left', title="Strategy", bbox_to_anchor=(1, 0.16))
+        # lgd2 = fig.legend(handles, labels, loc='center left', title="Strategy", bbox_to_anchor=(1, 0.5))
+        # lgd3 = fig.legend(handles, labels, loc='center left', title="Strategy", bbox_to_anchor=(1, 0.84))
+        plt.savefig(f'images_hierarchical/separate_experiments/'
+                    f'plots_experiment_{alpha}_{std}_{method}.png',
+                    bbox_extra_artists=lgds, bbox_inches='tight')
+
+            # plt.yticks(list(plt.yticks()[0]) + [0])
+            # plt.legend([], [], frameon=False)
+            # plt.yscale(['symlog', 'log'][int(sided == 'twosided')])
+            # plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: f'{value:.2f}'))
+            # # plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+            #
+            # handles, labels = plt.gca().get_legend_handles_labels()
+            # lgd = fig.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(1, 0.5))
+
+            # plt.savefig(f'images/separate_experiments_{sided}{["", "_outliers"][int(showoutliers)]}/'
+            #             f'plots_{sided}_experiment_{dgp}_{stat}_{alpha}.png',
+            #             bbox_extra_artists=(lgd, txt), bbox_inches='tight')
+
+
 if __name__ == '__main__':
     # folder_add = '_hierarchical'
     # folder_add = '_10000_reps'
@@ -916,22 +981,24 @@ if __name__ == '__main__':
     #                                    include_nan_repetitions=include_nans)
     # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    # tables = {}
-    # onlybts = True
-    #
-    # for stat in ['mean', 'median']:
-    #     print('Aggregated with ', stat)
-    #
-    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
-    #                                              onlybts=onlybts),
-    #                            ['near best', 'rank', 'distance', 'nans', 'kl div', 'kl div med', 'kl div rank']):
-    #         print(name)
-    #         if 'rank' in name:
-    #             ff = "%.2f"
-    #         else:
-    #             ff = "%.4f"
-    #         print(table.to_latex(float_format=ff))
-    #         tables[name] = table
+    tables = {}
+    onlybts = True
+
+    for stat in ['mean', 'median']:
+        print('Aggregated with ', stat)
+
+        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+                                                 onlybts=onlybts),
+                               ['near best', 'rank', 'distance', 'nans', 'kl div', 'kl div med', 'kl div rank',
+
+                               'kl div se', 'kl rank se']):
+            print(name)
+            if 'rank' in name:
+                ff = "%.2f"
+            else:
+                ff = "%.4f"
+            print(table.to_latex(float_format=ff))
+            tables[name] = table
 
 
     # print('BETTER:')
@@ -946,8 +1013,12 @@ if __name__ == '__main__':
     # separate_experiment_plots('results', showoutliers=False)
 
     # hierarchical results separation
-    for levels in [2, 3, 4]:
-        for method in ['double', 'percentile', 'bca']:
-            print(method, levels)
-            hierarchical_from_intervals(folder='results_hierarchical', bts_method=method, n_lvl=levels,
-                                        filenames=['intervals_first550experiments', 'intervals'])
+    # for levels in [2, 3, 4]:
+    #     for method in ['double', 'percentile', 'bca']:
+    #         print(method, levels)
+    #         hierarchical_from_intervals(folder='results_hierarchical', bts_method=method, n_lvl=levels,
+    #                                     filenames=['intervals_first550experiments', 'intervals'])
+
+    # plots for hierarchical experiments
+    # separate_experiment_plots_hierarchical()
+
