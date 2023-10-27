@@ -175,5 +175,7 @@ if __name__ == '__main__':
     plt.style.use('seaborn')
     # draw_distributions()
     # draw_bernoulli_se()
-    draw_kl_se(xval='p', scales='linear')
-    draw_kl_se(scales='linear')
+    # draw_kl_se(xval='p', scales='linear')
+    # draw_kl_se(scales='linear')
+    draw_hist_with_exact()
+

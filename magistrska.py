@@ -48,7 +48,7 @@ def draw_bootstrap_comparison(dgps, ns, statistics, alphas=None, b=1000, methods
                     ax.axvline(computed_intervals[method][alpha][-1], linestyle='--', label=method, color=col,
                                alpha=0.75)
                 else:
-                    ax.axvline(computed_intervals[method][alpha][-1], linestyle=':', color=col, alpha=0.75)
+                    ax.axvline(computed_intervals[method][alpha][-1], linestyle='--', color=col, alpha=0.75)
 
     plt.legend([], [], frameon=False)
     handles, labels = plt.gca().get_legend_handles_labels()
@@ -89,5 +89,5 @@ if __name__ == '__main__':
     ns = [128, 128, 8, 8]
     dgps = [DGPNorm(100, 0, 1), DGPExp(100, 1), DGPNorm(20, 0, 1), DGPNorm(20, 0, 1)]
     stats = [np.mean, np.std, np.mean, np.median]
-    # draw_bootstrap_comparison(dgps, ns, stats, name='2s100s20')
-    draw_length_comparison()
+    draw_bootstrap_comparison(dgps, ns, stats, name='4s100s20')
+    # draw_length_comparison()
