@@ -555,39 +555,6 @@ def better_methods_by(df, criteria, threshold=0.33):
     return better
 
 
-def better_methods_repetition_level(method, results_folder, combined_with='mean'):
-    """Finds better methods than proposed one - on repetition level."""
-    # read_csv if possible to read whole, else adapt results_from_intervals
-    intervals = pd.read_csv(f'{results_folder}/intervals.csv')
-
-    combined = pd.read_csv(f'{results_folder}/results_from_intervals_{combined_with}.csv')
-
-    combined['better_dist'] = combined.apply(better_dist_apply_repetitions, axis=1, intervals=intervals, method=method)
-    # combined['better_cov'] = combined.apply(better_cov_apply_repetitions, axis=1, intervals=intervals, method=method)
-    combined = combined[combined['method'] != method]  # no point in comparing method with itself
-    # TODO
-    return
-
-
-def better_dist_apply_repetitions(row, intervals, method):
-    experiment_intervals = intervals[(intervals['alpha'] == row['alpha']) & (intervals['dgp'] == row['dgp']) &
-                                     (intervals['statistic'] == row['statistic']) & (intervals['n'] == row['n'])]
-    # percentage of methods where another method is closer to exact intervals for at least its std
-    perc_better = np.mean(abs(experiment_intervals[method] - experiment_intervals['exact']) <
-                          (abs(experiment_intervals[row['method']] - experiment_intervals['exact']) + row['std']))
-    return perc_better
-
-
-def better_cov_apply_repetitions(row, intervals, method):
-    # nesmiselno!!
-    experiment_int = intervals[(intervals['alpha'] == row['alpha']) & (intervals['dgp'] == row['dgp']) &
-                               (intervals['statistic'] == row['statistic']) & (intervals['n'] == row['n'])]
-    experiment_int = experiment_int[experiment_int[row['method']] >= experiment_int['true_value']]
-    # percentage of intervals that another method covers but the suggested one does not
-    perc_bad = np.mean(experiment_int[method] < experiment_int['true_value'])
-    return perc_bad
-
-
 def average_distances_long(folder, combine_dist=np.mean):
     # for long tables (old results), skipping experiments with any nans
     # reading line by line because of 35GB dataframes
