@@ -148,32 +148,91 @@ def draw_histogram_distances():
         plt.close()
 
 
+# def draw_hist_with_exact():
+#     """Draws a histogram of double, standard and exact intervals, together with true value of the statistic."""
+#     intervals = pd.read_csv('results/intervals.csv')
+#     for (dgp, statistic, n, alpha, true_val) in [('DGPExp_1', 'mean', 16, 0.975, 1)]:
+#         int_exp = intervals[
+#             (intervals['dgp'] == dgp) & (intervals['statistic'] == statistic) & (intervals['n'] == n) & (
+#                         intervals['alpha'] == alpha) & (intervals['B'] == 1000)]
+#         int_exp['dist_d'] = int_exp['double']
+#         int_exp['dist_s'] = int_exp['standard']
+#         minn = int_exp[['dist_s', 'dist_d', 'exact']].min().min()
+#         maxx = int_exp[['dist_s', 'dist_d', 'exact']].max().max()
+#         plt.hist(int_exp['dist_d'].values, label='double', bins=100, alpha=0.8, range=(minn, maxx))
+#         plt.hist(int_exp['dist_s'].values, label='standard', bins=100, alpha=0.8, range=(minn, maxx))
+#         plt.hist(int_exp['exact'].values, label='exact', bins=100, alpha=0.8, range=(minn, maxx))
+#         plt.axvline(x=true_val, linestyle='--', c='gray', label='true value')
+#         # plt.title(dgp + ', ' + statistic + ', ' + str(n) + ', ' + str(alpha))
+#         plt.legend()
+#         plt.savefig(f'images/hist3_{dgp}_{statistic}_{n}_{alpha}.png')
+#         plt.close()
+#         cov_ex = np.mean(int_exp['exact'] > int_exp['true_value'])
+#         cov_double = np.mean(int_exp['double'] > int_exp['true_value'])
+#         cov_std = np.mean(int_exp['standard'] > int_exp['true_value'])
+#         print(f'Coverages: exact = {cov_ex}, double = {cov_double}, standard = {cov_std}')
+#
+#         d_double = np.mean(int_exp['double'] - int_exp['exact'])
+#         d_std = np.mean(int_exp['standard'] - int_exp['exact'])
+#         print(f'Distances: double = {d_double}, standard = {d_std}')
+
+
+def exact_interval_simulation(dgp, n, statistic, alphas, repetitions: int):
+    true_val = dgp.get_true_value(statistic.__name__)
+
+    if np.size(true_val) == 1:
+        stat_values = np.empty(repetitions)
+    else:
+        stat_values = np.empty((repetitions, np.size(true_val)))
+
+    data = dgp.sample(sample_size=n, nr_samples=repetitions)
+
+    for r in range(repetitions):
+        stat_values[r] = statistic(data[r])
+
+    distribution = stat_values - true_val
+
+    # inverse cdf that is used for exact interval calculation
+    inverse_cdf = {a: np.quantile(distribution, 1 - a) for a in alphas}
+    return inverse_cdf
+
+
 def draw_hist_with_exact():
     """Draws a histogram of double, standard and exact intervals, together with true value of the statistic."""
     intervals = pd.read_csv('results/intervals.csv')
+    original_values = ((intervals[
+            (intervals['dgp'] == 'DGPExp_1') & (intervals['statistic'] == 'mean') & (intervals['n'] == 16) & (
+                        intervals['alpha'] == 0.25) & (intervals['B'] == 1000)]['standard']).values + (intervals[
+        (intervals['dgp'] == 'DGPExp_1') & (intervals['statistic'] == 'mean') & (intervals['n'] == 16) & (
+                intervals['alpha'] == 0.75) & (intervals['B'] == 1000)]['standard']).values) / 2
+
     for (dgp, statistic, n, alpha, true_val) in [('DGPExp_1', 'mean', 16, 0.975, 1)]:
         int_exp = intervals[
+
             (intervals['dgp'] == dgp) & (intervals['statistic'] == statistic) & (intervals['n'] == n) & (
                         intervals['alpha'] == alpha) & (intervals['B'] == 1000)]
         int_exp['dist_d'] = int_exp['double']
         int_exp['dist_s'] = int_exp['standard']
         minn = int_exp[['dist_s', 'dist_d', 'exact']].min().min()
         maxx = int_exp[['dist_s', 'dist_d', 'exact']].max().max()
-        plt.hist(int_exp['dist_d'].values, label='double', bins=100, alpha=0.8, range=(minn, maxx))
-        plt.hist(int_exp['dist_s'].values, label='standard', bins=100, alpha=0.8, range=(minn, maxx))
-        plt.hist(int_exp['exact'].values, label='exact', bins=100, alpha=0.8, range=(minn, maxx))
-        plt.axvline(x=true_val, linestyle='--', c='gray', label='true value')
-        # plt.title(dgp + ', ' + statistic + ', ' + str(n) + ', ' + str(alpha))
-        plt.legend()
-        plt.savefig(f'images/hist3_{dgp}_{statistic}_{n}_{alpha}.png')
-        plt.close()
-        cov_ex = np.mean(int_exp['exact'] > int_exp['true_value'])
-        cov_double = np.mean(int_exp['double'] > int_exp['true_value'])
-        cov_std = np.mean(int_exp['standard'] > int_exp['true_value'])
-        print(f'Coverages: exact = {cov_ex}, double = {cov_double}, standard = {cov_std}')
 
-        d_double = np.mean(int_exp['double'] - int_exp['exact'])
-        d_std = np.mean(int_exp['standard'] - int_exp['exact'])
+        alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
+        from generators import DGPExp
+        inverse_cdf = exact_interval_simulation(DGPExp(0, 1), 16, np.mean, alphas, 100000)
+        intervals_exact2 = {a: original_values - inverse_cdf[a] for a in alphas}
+
+        plt.hist(intervals_exact2[0.975], label='exact2', bins=100, alpha=1, range=(minn, maxx))
+        plt.hist(int_exp['dist_d'].values, label='double', bins=100, alpha=0.5, range=(minn, maxx))
+        plt.hist(int_exp['dist_s'].values, label='standard', bins=100, alpha=0.5, range=(minn, maxx))
+        plt.hist(int_exp['exact'].values, label='exact', bins=100, alpha=0.5, range=(minn, maxx))
+        plt.axvline(x=true_val, linestyle='--', c='gray', label='true value')
+        plt.title(dgp + ', ' + statistic + ', ' + str(n) + ', ' + str(alpha))
+        plt.legend()
+        plt.savefig(f'images/test100000hist3_{dgp}_{statistic}_{n}_{alpha}.png')
+        plt.close()
+
+        d_double = np.mean(int_exp['double'] - intervals_exact2[0.975])
+        d_std = np.mean(int_exp['standard'] - intervals_exact2[0.975])
         print(f'Distances: double = {d_double}, standard = {d_std}')
 
 
