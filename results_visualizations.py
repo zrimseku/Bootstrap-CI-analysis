@@ -420,29 +420,7 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
             df_significant[col] -= se_df.loc[idx_min[col], col]
         df_significant = df_significant.loc[df.index, :]
 
-        # checking if each separate experiment has too big standard error
-        if experiment_se == 'kl':
-            # for kl estimation (computed by delta method, upper limit at alpha 0.025)
-            # ERROR we are doing se_kl(kl(p), a), not se_kl(p, a), cant get p from kl
-            # can we get
-            def se_kl(p, a):
-                fst_order = np.abs(np.log2(p * (1 - a)) - np.log2(a * (1 - p))) * (p * (1 - p) / r) ** 0.5
-                return fst_order
-
-            # additional_se = se_kl(df.min(), 0.025) + se_kl(df, 0.025)   ERROR at se_kl calculation from kl not p
-            additional_se = 0
-
-        elif experiment_se == 'rank':           # ERROR, rank is not averaged over repetitions.
-            # for rank estimation, conservative estimation by each method taking max variability
-            max_sd = np.sqrt(r/(r-1) * ((df_significant.shape[0] - 1) / 2)**2)
-            additional_se = max_sd / np.sqrt(r) * 2
-
-        else:
-            additional_se = 0
-
-        df_sig_each_exp = df_significant - additional_se
-
-        return df_sig_each_exp if values else (df_sig_each_exp >= 0)
+        return df_significant if values else (df_significant >= 0)
 
     kl_div_significant = significantly_worse(kl_div, kl_div_se, experiment_se='kl')
     kl_rank_significant = significantly_worse(kl_div_rank, kl_rank_se, experiment_se='rank')
