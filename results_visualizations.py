@@ -429,10 +429,10 @@ def aggregate_results(result_folder, methods=None, combined_with='mean', withnan
                 fst_order = np.abs(np.log2(p * (1 - a)) - np.log2(a * (1 - p))) * (p * (1 - p) / r) ** 0.5
                 return fst_order
 
-            # additional_se = se_kl(df.min(), 0.025) + se_kl(df, 0.025)   ERROR
+            # additional_se = se_kl(df.min(), 0.025) + se_kl(df, 0.025)   ERROR at se_kl calculation from kl not p
             additional_se = 0
 
-        elif experiment_se == 'rank':
+        elif experiment_se == 'rank':           # ERROR, rank is not averaged over repetitions.
             # for rank estimation, conservative estimation by each method taking max variability
             max_sd = np.sqrt(r/(r-1) * ((df_significant.shape[0] - 1) / 2)**2)
             additional_se = max_sd / np.sqrt(r) * 2
@@ -971,23 +971,23 @@ if __name__ == '__main__':
     #                                    include_nan_repetitions=include_nans)
     # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
 
-    # tables = {}
-    # onlybts = True
-    #
-    # for stat in ['mean', 'median']:
-    #     print('Aggregated with ', stat)
-    #
-    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
-    #                                              onlybts=onlybts),
-    #                            ['nans', 'kl div', 'kl div med', 'kl div rank',
-    #                            'kl div se', 'kl rank se', 'kl_div_significant', 'kl_rank_significant']):
-    #         print(name)
-    #         if 'rank' in name:
-    #             ff = "%.2f"
-    #         else:
-    #             ff = "%.4f"
-    #         print(table.to_latex(float_format=ff))
-    #         tables[name] = table
+    tables = {}
+    onlybts = True
+
+    for stat in ['mean', 'median']:
+        print('Aggregated with ', stat)
+
+        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+                                                 onlybts=onlybts),
+                               ['nans', 'kl div', 'kl div med', 'kl div rank',
+                               'kl div se', 'kl rank se', 'kl_div_significant', 'kl_rank_significant']):
+            print(name)
+            if 'rank' in name:
+                ff = "%.2f"
+            else:
+                ff = "%.4f"
+            print(table.to_latex(float_format=ff))
+            tables[name] = table
 
 
     # print('BETTER:')
@@ -1010,4 +1010,11 @@ if __name__ == '__main__':
 
     # plots for hierarchical experiments
     # separate_experiment_plots_hierarchical()
+
+    # largest se of experiment distance estimation
+    # df = pd.read_csv(f'results_final/results_from_intervals_mean_withnans.csv')
+    # df['se_rel'] = df['std'] / 100 / df['avg_distance']
+    # test = df.nlargest(n=50, columns=['se_rel'])
+    # test_d = df[df['method'] == 'double'].nlargest(n=50, columns=['se_rel'])
+    # test_s = df[df['method'] == 'standard'].nlargest(n=50, columns=['se_rel'])
 
