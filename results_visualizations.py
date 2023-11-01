@@ -961,6 +961,7 @@ if __name__ == '__main__':
     additional = ''
     # cov = pd.read_csv(f'results{folder_add}/coverage.csv')
     bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed']
+    plt.style.use('seaborn')
 
     # main_plot_comparison(filter_by={}, additional=additional, scale='linear', folder_add=folder_add, set_ylim=True)
 

@@ -163,10 +163,18 @@ def draw_hist_with_exact():
         plt.hist(int_exp['dist_s'].values, label='standard', bins=100, alpha=0.8, range=(minn, maxx))
         plt.hist(int_exp['exact'].values, label='exact', bins=100, alpha=0.8, range=(minn, maxx))
         plt.axvline(x=true_val, linestyle='--', c='gray', label='true value')
-        plt.title(dgp + ', ' + statistic + ', ' + str(n) + ', ' + str(alpha))
+        # plt.title(dgp + ', ' + statistic + ', ' + str(n) + ', ' + str(alpha))
         plt.legend()
         plt.savefig(f'images/hist3_{dgp}_{statistic}_{n}_{alpha}.png')
         plt.close()
+        cov_ex = np.mean(int_exp['exact'] > int_exp['true_value'])
+        cov_double = np.mean(int_exp['double'] > int_exp['true_value'])
+        cov_std = np.mean(int_exp['standard'] > int_exp['true_value'])
+        print(f'Coverages: exact = {cov_ex}, double = {cov_double}, standard = {cov_std}')
+
+        d_double = np.mean(int_exp['double'] - int_exp['exact'])
+        d_std = np.mean(int_exp['standard'] - int_exp['exact'])
+        print(f'Distances: double = {d_double}, standard = {d_std}')
 
 
 if __name__ == '__main__':
