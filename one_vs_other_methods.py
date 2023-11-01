@@ -295,7 +295,7 @@ def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_si
 
 def analyze_experiments(method_one, name, other_methods=None, result_folder='results', statistics=None,
                         ns=None, separate_dgp='coverage', sided='onesided'):
-
+    # USING THIS ONE FOR STEP 2
     df = pd.read_csv(f'{result_folder}/{sided}_{method_one}_{name}_nonans.csv')
     # df_bad = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_prob']<0.1))]
 
@@ -313,34 +313,42 @@ def analyze_experiments(method_one, name, other_methods=None, result_folder='res
     print(f'There are {bad_both.shape[0]} cases where a method is better than {method_one}.'
           f'Out of them {bad_both[bad_both["m2_better_kl"]].shape[0]} have better coverage.')
 
-    bad_s = pd.DataFrame()
-    bad_s['nr_better'] = df_bad_coverage[['method', 'stat']].value_counts()
-    bad_s['perc_better'] = bad_s['nr_better'] / df[['method', 'stat']].value_counts()
-    bad_s = bad_s.sort_values('perc_better', ascending=False)
-    for method, stat in bad_s.index:
-        # for alpha in sorted(df_bad['alpha'].unique()):
-        for dgp in sorted(df_bad_coverage['dgp'].unique()):
-            bad_s.loc[(method, stat), dgp] = ', '.join(str(n) for n in
-                                                         sorted(df_bad_coverage[(df_bad_coverage['method'] == method) &
-                                                                       (df_bad_coverage['stat'] == stat) &
-                                                                       (df_bad_coverage['dgp'] == dgp)]['n'].unique()))
+    def compute_bad_s(df_bad):
+        bad_s = pd.DataFrame()
+        bad_s['nr_better'] = df_bad[['method', 'stat']].value_counts()
+        bad_s['perc_better'] = bad_s['nr_better'] / df[['method', 'stat']].value_counts()
+        bad_s['se_perc'] = bad_s['perc_better'] * (1 - bad_s['perc_better']) / \
+                           np.sqrt(df[['method', 'stat']].value_counts())
+        bad_s['nr_exp'] = df[['method', 'stat']].value_counts()
+        bad_s = bad_s.sort_values('perc_better', ascending=False)
+        for method, stat in bad_s.index:
+            # for alpha in sorted(df_bad['alpha'].unique()):
+            for dgp in sorted(df_bad['dgp'].unique()):
+                bad_s.loc[(method, stat), dgp] = ', '.join(str(n) for n in
+                                                           sorted(df_bad[(df_bad['method'] == method) &
+                                                                         (df_bad['stat'] == stat) &
+                                                                         (df_bad['dgp'] == dgp)]['n'].unique()))
+        return bad_s
+
+    bad_s = compute_bad_s(df_bad_coverage)
 
     results = {'coverage': bad_s}
 
     bad_dist = df[(((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df[f'better_{n2}_m2']))]
 
     if bad_dist.shape[0] > 0:
-        bad_s = pd.DataFrame()
-        bad_s['nr_better'] = bad_dist[['method', 'stat']].value_counts()
-        bad_s['perc_better'] = bad_s['nr_better'] / df[['method', 'stat']].value_counts()
-        bad_s = bad_s.sort_values('perc_better', ascending=False)
-        for method, stat in bad_s.index:
-            # for alpha in sorted(df_bad['alpha'].unique()):
-            for dgp in sorted(bad_dist['dgp'].unique()):
-                bad_s.loc[(method, stat), dgp] = ', '.join(str(n) for n in
-                                                             sorted(bad_dist[(bad_dist['method'] == method) &
-                                                                           (bad_dist['stat'] == stat) &
-                                                                           (bad_dist['dgp'] == dgp)]['n'].unique()))
+        bad_s = compute_bad_s(bad_dist)
+        # bad_s = pd.DataFrame()
+        # bad_s['nr_better'] = bad_dist[['method', 'stat']].value_counts()
+        # bad_s['perc_better'] = bad_s['nr_better'] / df[['method', 'stat']].value_counts()
+        # bad_s = bad_s.sort_values('perc_better', ascending=False)
+        # for method, stat in bad_s.index:
+        #     # for alpha in sorted(df_bad['alpha'].unique()):
+        #     for dgp in sorted(bad_dist['dgp'].unique()):
+        #         bad_s.loc[(method, stat), dgp] = ', '.join(str(n) for n in
+        #                                                      sorted(bad_dist[(bad_dist['method'] == method) &
+        #                                                                    (bad_dist['stat'] == stat) &
+        #                                                                    (bad_dist['dgp'] == dgp)]['n'].unique()))
 
         results['distance'] = bad_s
 
@@ -348,12 +356,18 @@ def analyze_experiments(method_one, name, other_methods=None, result_folder='res
     if separate_dgp == 'coverage':
         bad_separate_dgp = df_bad_coverage
         results_mag = pd.DataFrame(results[separate_dgp]['perc_better'])
+        mag_se = pd.DataFrame(results[separate_dgp]['se_perc'])
+        mag_n_exp = pd.DataFrame(results[separate_dgp]['nr_exp'])
     elif separate_dgp == 'distance':
         bad_separate_dgp = bad_dist
         results_mag = pd.DataFrame(results[separate_dgp]['perc_better'])
+        mag_se = pd.DataFrame(results[separate_dgp]['se_perc'])
+        mag_n_exp = pd.DataFrame(results[separate_dgp]['nr_exp'])
     else:
         bad_separate_dgp = bad_both
         results_mag = pd.DataFrame()
+        mag_se = pd.DataFrame()
+        mag_n_exp = pd.DataFrame()
 
     for dgp in bad_separate_dgp['dgp'].unique():
         df_bad = bad_separate_dgp[bad_separate_dgp['dgp'] == dgp]
@@ -361,6 +375,9 @@ def analyze_experiments(method_one, name, other_methods=None, result_folder='res
         bad_s = pd.DataFrame()
         bad_s['nr_better'] = df_bad[['method', 'stat']].value_counts()
         bad_s['perc_better'] = bad_s['nr_better'] / df[df['dgp'] == dgp][['method', 'stat']].value_counts()
+        bad_s['se_perc'] = bad_s['perc_better'] * (1 - bad_s['perc_better']) / \
+                           np.sqrt(df[df['dgp'] == dgp][['method', 'stat']].value_counts())
+        bad_s['nr_exp'] = df[df['dgp'] == dgp][['method', 'stat']].value_counts()
         bad_s = bad_s.sort_values('perc_better', ascending=False)
 
         bad_n = pd.DataFrame(df_bad[['method', 'n']].value_counts())
@@ -375,6 +392,8 @@ def analyze_experiments(method_one, name, other_methods=None, result_folder='res
                                                                          (df_bad['alpha'] == alpha)]['n'].unique()))
 
             results_mag.loc[(method, stat), dgp] = bad_s.loc[(method, stat), 'perc_better']
+            mag_se.loc[(method, stat), dgp] = bad_s.loc[(method, stat), 'se_perc']
+            mag_n_exp.loc[(method, stat), dgp] = bad_s.loc[(method, stat), 'nr_exp']
 
         results[f'both_{dgp}'] = bad_s
 
@@ -386,7 +405,17 @@ def analyze_experiments(method_one, name, other_methods=None, result_folder='res
     results_mag = results_mag.sort_values(['stat', 'perc_better'], ascending=False)
     results_mag[results_mag.columns[2:]] = results_mag[results_mag.columns[2:]] * 100
 
+    # mag_se = mag_se[results_mag.index, :]
+    mag_se = mag_se.reset_index()
+    mag_se = mag_se.sort_values(['stat', 'se_perc'], ascending=False)
+    mag_se[mag_se.columns[2:]] = mag_se[mag_se.columns[2:]] * 100
+
+    mag_n_exp = mag_n_exp.reset_index()
+    mag_n_exp = mag_n_exp.sort_values(['stat', 'nr_exp'], ascending=False)
+
     results[f'mag_{separate_dgp}'] = results_mag
+    results[f'mag_{separate_dgp}_se'] = mag_se
+    results[f'mag_{separate_dgp}_nr_exp'] = mag_n_exp
 
     mag_n = pd.DataFrame(df_bad_coverage.value_counts('n')/df.shape[0])
     mag_n.columns = ['better coverage']
@@ -402,7 +431,7 @@ def analyze_experiments(method_one, name, other_methods=None, result_folder='res
             #     print(results[name].sort_index().to_latex(float_format="%.2f", na_rep=0))
             # else:
             print(results[name].to_latex(index=False, float_format="%.2f").replace('NaN', ''))
-        results[name].to_csv(f'results_better/{method_one}_{name}_{sided}.csv')
+        # results[name].to_csv(f'results_better/{method_one}_{name}_{sided}.csv')
 
     return results
 
@@ -428,8 +457,10 @@ if __name__ == '__main__':
     #     t_nan.to_csv(f'results/onesided_{m}_{name}_nonans.csv', index=False)
 
     # results for step 2 of analysis
-    rd = analyze_experiments('double', name=name, statistics=['mean', 'median', 'std', 'corr'], sided='twosided')
-    rs = analyze_experiments('standard', name=name, statistics=['percentile_5', 'percentile_95'], sided='twosided')
+    rd = analyze_experiments('double', name=name, statistics=['mean', 'median', 'std', 'corr'], sided='onesided', separate_dgp='distance')
+    rs = analyze_experiments('standard', name=name, statistics=['percentile_5', 'percentile_95'], sided='onesided', separate_dgp='distance')
+    rd = analyze_experiments('double', name=name, statistics=['mean', 'median', 'std', 'corr'], sided='twosided', separate_dgp='distance')
+    rs = analyze_experiments('standard', name=name, statistics=['percentile_5', 'percentile_95'], sided='twosided', separate_dgp='distance')
 
     # if you want to add latex table for percentage of better methods (n)
     # merged_df = pd.concat([rd['mag_n'], rs['mag_n']], axis=1, keys=['double', 'standard'])
