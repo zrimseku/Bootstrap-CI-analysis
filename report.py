@@ -159,9 +159,9 @@ def draw_hist_with_exact():
         int_exp['dist_s'] = int_exp['standard']
         minn = int_exp[['dist_s', 'dist_d', 'exact']].min().min()
         maxx = int_exp[['dist_s', 'dist_d', 'exact']].max().max()
-        plt.hist(int_exp['dist_d'].values, label='double', bins=100, alpha=0.8, range=(minn, maxx))
-        plt.hist(int_exp['dist_s'].values, label='standard', bins=100, alpha=0.8, range=(minn, maxx))
-        plt.hist(int_exp['exact'].values, label='exact', bins=100, alpha=0.8, range=(minn, maxx))
+        plt.hist(int_exp['dist_d'].values, label='double', bins=100, alpha=0.5, range=(minn, maxx))
+        plt.hist(int_exp['dist_s'].values, label='standard', bins=100, alpha=0.5, range=(minn, maxx))
+        plt.hist(int_exp['exact'].values, label='exact', bins=100, alpha=0.5, range=(minn, maxx))
         plt.axvline(x=true_val, linestyle='--', c='gray', label='true value')
         # plt.title(dgp + ', ' + statistic + ', ' + str(n) + ', ' + str(alpha))
         plt.legend()
