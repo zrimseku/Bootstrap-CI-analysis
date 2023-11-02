@@ -250,7 +250,7 @@ def plot_times_line():
         xt = sorted(df_long['n'].unique())
         plt.xticks(xt, labels=[str(x) for x in xt])
         plt.yscale('log')
-        plt.ylabel('t[s]')
+        plt.ylabel('t [s]')
         plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         # plt.title(f'Times of CI calculation for {stat}')
         plt.tight_layout()
@@ -950,24 +950,24 @@ if __name__ == '__main__':
     #             results_from_intervals('results', combine_dist=stat, only_bts=only_bts,
     #                                    include_nan_repetitions=include_nans)
     # combine_results(stat.__name__, only_bts=only_bts) not needed anymore with complete wide results
-
-    tables = {}
-    onlybts = True
-
-    for stat in ['mean', 'median']:
-        print('Aggregated with ', stat)
-
-        for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
-                                                 onlybts=onlybts),
-                               ['nans', 'kl div', 'kl div med', 'kl div rank',
-                               'kl div se', 'kl rank se', 'kl_div_significant', 'kl_rank_significant']):
-            print(name)
-            if 'rank' in name:
-                ff = "%.2f"
-            else:
-                ff = "%.4f"
-            print(table.to_latex(float_format=ff))
-            tables[name] = table
+    #
+    # tables = {}
+    # onlybts = True
+    #
+    # for stat in ['mean', 'median']:
+    #     print('Aggregated with ', stat)
+    #
+    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+    #                                              onlybts=onlybts),
+    #                            ['nans', 'kl div', 'kl div med', 'kl div rank',
+    #                            'kl div se', 'kl rank se', 'kl_div_significant', 'kl_rank_significant']):
+    #         print(name)
+    #         if 'rank' in name:
+    #             ff = "%.2f"
+    #         else:
+    #             ff = "%.4f"
+    #         print(table.to_latex(float_format=ff))
+    #         tables[name] = table
 
 
     # print('BETTER:')
