@@ -14,6 +14,7 @@ def draw_bootstrap_comparison(dgps, ns, statistics, alphas=None, b=1000, methods
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
     for dgp, n, statistic, ax in zip(dgps, ns, statistics, axes.flatten()):
+        print(dgp, n, statistic)
         data = dgp.sample(sample_size=n)
 
         if alphas is None:
@@ -45,9 +46,11 @@ def draw_bootstrap_comparison(dgps, ns, statistics, alphas=None, b=1000, methods
             col = next(colors)
             for alpha in alphas:
                 if alpha == alphas[0]:  # label only the first line of a method to avoid duplicates in legend
+                    print(alpha, method, computed_intervals[method][alpha][-1])
                     ax.axvline(computed_intervals[method][alpha][-1], linestyle='--', label=method, color=col,
                                alpha=0.75)
                 else:
+                    print(alpha, method, computed_intervals[method][alpha][-1])
                     ax.axvline(computed_intervals[method][alpha][-1], linestyle='--', color=col, alpha=0.75)
 
     plt.legend([], [], frameon=False)
