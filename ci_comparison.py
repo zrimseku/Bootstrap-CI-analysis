@@ -10,14 +10,12 @@ import pandas as pd
 import scipy
 from tqdm import tqdm
 from scipy.stats import norm
-from scipy.stats import bootstrap as boot_sci
-from arch.bootstrap import IIDBootstrap as boot_arch
 import matplotlib.pyplot as plt
 from collections import defaultdict
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from ci_methods import Bootstrap
+import bootstrap_ci as boot
 from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPBernoulli, DGPCategorical, \
     DGPRandEff
 from R_functions import psignrank_range
@@ -71,7 +69,7 @@ class CompareIntervals:
     def compute_bootstrap_intervals(self, data: np.array):
         # initialize and sample so we will have the same bootstrap samples for all bootstrap methods
         t = time.time()
-        bts = Bootstrap(data, self.statistic, self.use_jit)
+        bts = boot.Bootstrap(data, self.statistic, self.use_jit)
         bts.sample(self.b)
         bts.evaluate_statistic()
         ts = time.time() - t            # time needed for sampling (will add it to all methods)
@@ -102,7 +100,7 @@ class CompareIntervals:
                         # skip if we sample without replacement on all levels, as this would just be original set
                         continue
                 t = time.time()
-                bts = Bootstrap(data, self.statistic, self.use_jit, group_indices=group_indices)
+                bts = boot.Bootstrap(data, self.statistic, self.use_jit, group_indices=group_indices)
                 bts.sample(self.b, sampling='hierarchical',
                            sampling_args={'method': sampling_method, 'strategy': strategy_bool})
                 bts.evaluate_statistic(sampling='hierarchical',  sampling_args={'method': sampling_method,
