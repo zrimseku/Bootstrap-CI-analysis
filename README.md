@@ -58,7 +58,7 @@ We used the following distributions:
             \end{bmatrix}$.
   
 We used samples of sizes $n \in \{4, 8, 16, 32, 64, 128, 256\}$ randomly generated from these distributions to estimate 
-confidence intervals for the *mean*, *median*, *standard deviation*, *5^\{th\}* and *95^{th} percentile* and *correlation*.
+confidence intervals for the *mean*, *median*, *standard deviation*, *$5^\{th\}$* and *95^{th} percentile* and *correlation*.
 We were interested in confidence levels $\alpha \in {0.025, 0.05, 0.25, 0.75, 0.95, 0.975}$.
 
 ## Framework
