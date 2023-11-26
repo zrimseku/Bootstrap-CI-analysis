@@ -36,9 +36,7 @@ Their description can be seen in the library's
 
 ## Experiment dimensions
 To get the most general results possible, we compared all methods over many combinations of different DGP's, statistics, 
-dataset sizes and coverage levels. 
-Data generating processes used are implemented in the file `generators.py`, where you can also add your custom DGP, by
-extending the `DGP` class. 
+dataset sizes and coverage levels.
 We used the following distributions:
 - standard normal,
 - uniform from $0$ to $1$,
@@ -72,15 +70,35 @@ variational properties.
 # Results
 More detailed results can again be found in the thesis, in chapter 4.
 In short, we answered to the above steps:
-1. The best general bootstrap method is the *double* bootstrap. Additionally we recommend to use the *standard* bootstrap 
-   when estimating confidence intervals of extreme percentiles.
+1. The best general bootstrap method is the **double** bootstrap. Additionally we recommend to use the **standard** 
+   bootstrap when estimating confidence intervals of extreme percentiles.
 2. There is no method (bootstrap or traditional) that would have significantly better accuracy in most of the 
    repetitions for experiments on any DGP. Only for the correlation, Fisher's method is equally accurate but more
    correct.
-3. Results are similar for two-sided intervals.
+3. Results for two-sided intervals have the same conclusions.
 
 ## Hierarchical bootstrap
-We recommend using the strategy that samples with replacement on all levels, as it has the best accuracy and it best
+We recommend using the strategy that samples with replacement on all levels, as it has the best accuracy, and it best
 mimics the DGP's variational properties.
 
 # Reproducibility and custom experiments
+Data generating processes used are implemented in the file `generators.py`, where you can also add your custom DGP, by
+extending the `DGP` class. 
+
+To get the results of all experiments, both for non-parametric and hierarchical case, you can run the file 
+`ci_comparison.py`. You can change the desired DGP's, sample sizes, parameters, methods and confidence levels in the 
+main function of the file to serve your interests.
+
+You can visually compare all methods' accuracy and correctness over different experiments by running the function 
+`main_plot_comparison` from `results_visualizations.py` file.
+If you want to plot the accuracy and correctness for each experiment together, run the function 
+`separate_experiment_plots` from the same file.
+
+The quantitative result analysis is done in file `result_analysis.py`. Results for first step of the analysis, selection
+of the best bootstrap method, can be obtained with function `aggregate_results`. Second step results are obtained using
+function `analyze_experiments`. 
+For third step we used the same function only changing the value of the parameter `sided` to `'twosided'`.
+
+# Additional results
+For the sake of brevity, some results were omitted from the thesis or shown for only one experiment.
+These can be seen in folder `additional_results` / found on OneDrive? TODO: links.

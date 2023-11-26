@@ -1,7 +1,221 @@
 import numpy as np
 import scipy as sp
 import pandas as pd
-from results_visualizations import kl
+
+from collections import defaultdict
+
+
+def compare_variances():
+    intervals = pd.read_csv('results_hierarchical/intervals.csv')
+    intervals['var_ratio'] = intervals['mean_var'] / intervals['gt_variance']
+
+    intervals = intervals[intervals['method'] != 'exact']
+    intervals['strat'] = intervals['method'].apply(lambda x: x.split('_')[1])
+    res_int = intervals[['strat', 'var_ratio']].groupby('strat').mean().sort_values(by='var_ratio')
+
+    coverage = pd.read_csv('results_hierarchical/coverage.csv')
+    # cov1 = cov[::2]
+    coverage['strat'] = coverage['method'].apply(lambda x: x.split('_')[1])
+    res_cov = coverage[['strat', 'var_coverage']].groupby('strat').mean().sort_values(by='var_coverage')
+
+    return res_int, res_cov
+
+
+def kl(p, q):
+    """K-L divergence."""
+    part1 = np.where(p == 0, 0, p * np.log2(p / q))
+    part2 = np.where(p == 1, 0, (1 - p) * np.log2((1 - p) / (1 - q)))
+    return part1 + part2
+
+
+def aggregate_results(result_folder, methods=None, combined_with='mean', withnans=True, onlybts=True, r=10000):
+    # reading and filtering coverage table
+    results = pd.read_csv(f'{result_folder}/results_from_intervals_{combined_with}{["", "_bts"][int(onlybts)]}'
+                          f'{["", "_withnans"][int(withnans)]}.csv')
+
+    # coverage = coverage[coverage['B'] == 1000]  # if you want to filter results
+    if onlybts:
+        if methods is None:
+            methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
+        results = results[results['method'].isin(methods)]
+
+    # calculations for table of closeness to the best method
+    results['difference'] = results['coverage'] - results['alpha']
+    results['abs_difference'] = abs(results['difference'])
+    min_distances = results[['alpha', 'coverage', 'abs_difference', 'dgp', 'statistic', 'n']] \
+        .sort_values('abs_difference').groupby(['alpha', 'dgp', 'statistic', 'n']).first()
+    results['min_difference'] = results.apply(
+        lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['abs_difference'], axis=1)
+    results['best_coverage'] = results.apply(
+        lambda row: min_distances.loc[row['alpha'], row['dgp'], row['statistic'], row['n']]['coverage'], axis=1)
+    results['std'] = np.sqrt(results['best_coverage'] * (1 - results['best_coverage']) / results['repetitions'])
+    results['near_best'] = abs(results['best_coverage'] - results['coverage']) < results['std']
+
+    # calculation for KL-divergence
+    results['kl_div'] = kl(results['coverage'], results['alpha'])
+
+    # calculation for ranks
+    results['rank'] = results[['alpha', 'abs_difference', 'dgp', 'statistic', 'n']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).rank()
+    results['rank_kl'] = results[['alpha', 'kl_div', 'dgp', 'statistic', 'n']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).rank()
+
+    def agregate_n_stat(df, column, fun, asc=True):
+        agg = fun(df[['method', column]].groupby(['method']))
+
+        agg_n = fun(results[['method', column, 'n']].groupby(['method', 'n'])).unstack()
+        agg_n.columns = agg_n.columns.droplevel()
+        agg = agg.join(agg_n)
+
+        agg_stat = fun(results[['method', column, 'statistic']].groupby(['method', 'statistic'])).unstack()
+        agg_stat.columns = agg_stat.columns.droplevel()
+        agg = agg.join(agg_stat).sort_values(by=column, ascending=asc)
+
+        return agg
+
+    # tables
+    # first comparison by near best in avg rank, distance, nans
+    near_best = agregate_n_stat(results, 'near_best', lambda x: x.sum(), asc=False)
+    avg_rank = agregate_n_stat(results, 'rank', lambda x: x.mean())
+
+    dist_table = agregate_n_stat(results, 'avg_distance', lambda x: x.median())
+    nans = agregate_n_stat(results, 'nans', lambda x: x.mean())
+
+    nans_a = results[['method', 'nans', 'alpha']].groupby(['method', 'alpha']).mean().unstack()
+    nans_a.columns = nans_a.columns.droplevel()
+    nans = nans.join(nans_a)
+
+    nans = nans[nans['nans'] > 0].sort_values(by='nans', ascending=False)
+
+    # normalization
+    for m in avg_rank.index:
+        near_best.loc[m, 'near_best'] /= results[results['method'] == m].shape[0]
+        for n in results['n'].unique():
+            near_best.loc[m, n] /= results[(results['method'] == m) & (results['n'] == n)].shape[0]
+        for stat in results['statistic'].unique():
+            near_best.loc[m, stat] /= results[(results['method'] == m) & (results['statistic'] == stat)].shape[0]
+
+    # check for differences in method ranking
+    results['rank_dist'] = results[['alpha', 'avg_distance', 'dgp', 'statistic', 'n']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).rank()
+
+    # rank diff -> mean, median, kok kerih eksperimentov jih je med tistimi k majo > n razliko
+
+    # gather all nans
+    nans_all = results[results['method'] == 'ci_quant_nonparam'][['method', 'nans', 'statistic', 'repetitions',
+                                                                  'n', 'alpha']].groupby(['method', 'statistic',
+                                                                                          'n', 'alpha']).mean()
+    nans_all = nans_all[nans_all['nans'] > 0]['nans'].sort_values(ascending=False)
+
+    # t = results[results['method'].isin(['double', 'standard'])] for finding experiment for histogram
+
+    # current comparison by kl div
+    kl_div = agregate_n_stat(results, 'kl_div', lambda x: x.mean())
+    kl_div_se = agregate_n_stat(results, 'kl_div', lambda x: x.sem())
+    kl_div_med = agregate_n_stat(results, 'kl_div', lambda x: x.median())
+    kl_div_rank = agregate_n_stat(results, 'rank_kl', lambda x: x.mean())
+    kl_rank_se = agregate_n_stat(results, 'rank_kl', lambda x: x.sem())
+
+    def significantly_worse(df, se_df, values=False, experiment_se=None):
+        # subtracting method differences and standard errors, to know which are significantly worse (positive ones)
+        idx_min = df.idxmin()
+        df_significant = df - df.min() - se_df
+        for col in df_significant.columns:
+            # subtracting se of the best method
+            df_significant[col] -= se_df.loc[idx_min[col], col]
+        df_significant = df_significant.loc[df.index, :]
+
+        return df_significant if values else (df_significant >= 0)
+
+    kl_div_significant = significantly_worse(kl_div, kl_div_se, experiment_se='kl')
+    kl_rank_significant = significantly_worse(kl_div_rank, kl_rank_se, experiment_se='rank')
+
+    return nans_all, kl_div, kl_div_med, kl_div_rank, kl_div_se, kl_rank_se, kl_div_significant, kl_rank_significant
+
+
+def results_from_intervals(folder, combine_dist=np.mean, include_nan_repetitions=False, only_bts=True):
+    # for wide tables (new results), skipping just replications that have nans
+    # we are reading results line by line because of possibility of very large dataframes that can't fit in memory
+    dist_dict = defaultdict(list)
+    nans = defaultdict(int)
+    coverage_dict = defaultdict(lambda: [0, 0])
+    stds = {}
+    bts_methods = ['percentile', 'standard', 'basic', 'bc', 'bca', 'double', 'smoothed', 'studentized']
+    stat_methods = {'mean': bts_methods + ['wilcoxon', 'ttest'],
+                    'median': bts_methods + ['wilcoxon', 'ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
+                    'std': bts_methods + ['chi_sq'],
+                    'percentile': bts_methods + ['ci_quant_param', 'ci_quant_nonparam', 'maritz-jarrett'],
+                    'corr': bts_methods + ['ci_corr_pearson']}
+    with open(f'{folder}/intervals.csv') as f:
+        keys = f.readline().strip('\n').split(',')  # header
+        for line in f:
+            line_dict = dict(zip(keys, line.strip('\n').split(',')))
+            alpha, dgp, statistic, n, B, repetitions, true_val, exact = [line_dict[name] for name in
+                                                                         ['alpha', 'dgp', 'statistic', 'n', 'B',
+                                                                          'repetitions', 'true_value', 'exact']]
+            alpha, n, B, repetitions, true_val, exact = float(alpha), int(n), int(B), int(repetitions), \
+                                                        float(true_val), float(exact)
+            if B != 1000:
+                # add if you want to skip any results
+                continue
+
+            any_nan = False
+            all_methods = bts_methods if only_bts else stat_methods[line_dict['statistic'][:10]]
+            for method in all_methods:
+                if line_dict[method] == '':
+                    any_nan = True
+                    nans[(method, alpha, dgp, statistic, n, repetitions)] += 1
+
+                if (method, alpha, dgp, statistic, n, repetitions) not in dist_dict:
+                    # add missing keys for dataframe iteration
+                    dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = []
+
+            if (not any_nan) or include_nan_repetitions:
+                for method in stat_methods[line_dict['statistic'][:10]]:
+                    pred = line_dict[method]
+                    if pred != '':
+                        pred = float(pred)
+                        dist_dict[(method, alpha, dgp, statistic, n, repetitions)].append(abs(pred - exact))
+                        coverage_dict[(method, alpha, dgp, statistic, n, repetitions)][0] += int(pred >= true_val)
+                        coverage_dict[(method, alpha, dgp, statistic, n, repetitions)][1] += 1
+
+                        # aggregating results as soon as we can to save memory
+                        if len(dist_dict[(method, alpha, dgp, statistic, n, repetitions)]) == repetitions:
+                            # change list of distances with mean/median distance
+                            stds[(method, alpha, dgp, statistic, n, repetitions)] = np.std(
+                                dist_dict[(method, alpha, dgp, statistic, n, repetitions)])
+                            dist_dict[(method, alpha, dgp, statistic, n, repetitions)] = combine_dist(
+                                dist_dict[(method, alpha, dgp, statistic, n, repetitions)])
+
+    results = pd.DataFrame(columns=['method', 'alpha', 'dgp', 'statistic', 'n', 'repetitions', 'avg_distance',
+                                    'std', 'coverage', 'nans'])
+    for i, experiment in enumerate(dist_dict.keys()):
+        distances = dist_dict[experiment]
+        covers, count = coverage_dict[experiment]
+        if type(distances) == list:
+            if len(distances) == 0:
+                avg_dist = np.nan
+                std = np.nan
+            else:
+                avg_dist = combine_dist(distances)
+                std = np.std(distances)
+        else:
+            avg_dist = distances
+            std = stds[experiment]
+
+        results.loc[i] = [*experiment, avg_dist, std, np.nan if count == 0 else covers / count,
+                          nans[experiment] / experiment[-1]]
+
+    # normalization of distances based on the best method
+    results['min_distance'] = results['avg_distance']
+    results['min_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'min_distance']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x.min())
+    results['norm_distance'] = results[['alpha', 'dgp', 'statistic', 'n', 'avg_distance']].groupby(
+        ['alpha', 'dgp', 'statistic', 'n']).transform(lambda x: x / x.min())
+
+    results.to_csv(f'{folder}/results_from_intervals_{combine_dist.__name__}_wthmin_{["", "_bts"][int(only_bts)]}'
+                   f'{["", "_withnans"][int(include_nan_repetitions)]}.csv', index=False)
+    return results
 
 
 def analyze_length(lengthA, lengthB, len_dist='ld', better_coef=1.1):
@@ -158,8 +372,6 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
             # we will save percentage of times that a method is unable to give predictions
             nans1 = df_a[method_one].isna().mean()
 
-            if (dgp == 'DGPNorm_0_1') & (alpha == 0.025) & (stat == 'mean') & (n == 4):
-                stop = True     # TODO delete (just for testing)
 
             if nans1 == 1:      # if method_one was unable to give any predictions
 
@@ -174,7 +386,7 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                         exp_dict.update({'coverage_m1_mu': -1, 'coverage_m1_q025': -1, 'coverage_m1_q975': -1,
                                          'coverage_m2_mu': -1, 'coverage_m2_q025': -1, 'coverage_m2_q975': -1})
 
-                    else:                               # m2 gave some predictions (TODO do we want to know how many?)
+                    else:                               # m2 gave some predictions
                         covers_m2 = (df_a[m2] > df_a['true_value']).values
                         res_cov = analyze_coverage_m1_false(covers_m2, alpha)
                         exp_dict.update(res_cov)
@@ -187,7 +399,6 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                 distance_m1 = abs(df_a[method_one] - df_a['exact']).values
 
                 for m2 in compare_to[stat]:             # compare to all other methods
-                    # TODO do we want to separate those without predictions?
                     covers_m2 = (df_a[m2] > df_a['true_value']).values
                     distance_m2 = abs(df_a[m2] - df_a['exact']).values
 
@@ -243,7 +454,7 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                             (df_al[method_one] < df_al['true_value']).values
                 length_m1 = df_au[method_one].values - df_al[method_one].values
 
-                for m2 in compare_to[stat]:                 # compare to all other methods (TODO check predictions?)
+                for m2 in compare_to[stat]:                 # compare to all other methods
                     covers_m2 = (df_au[m2] > df_au['true_value']).values & (df_al[m2] < df_al['true_value']).values
                     length_m2 = df_au[m2].values - df_al[m2].values
 
@@ -270,34 +481,10 @@ def one_vs_others(method_one, other_methods=None, one_sided=None, two_sided=None
                      index=False)
 
 
-def one_vs_other_analysis(method_one, other_methods=None, one_sided=None, two_sided=None, result_folder='results', B=1000,
-                  reps=10000, skip_nans=True):
-    # if one_sided is None:
-    #     one_sided = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
-    # if two_sided is None:
-    #     two_sided = [0.5, 0.9, 0.95]
-    results_df = pd.read_csv(f'{result_folder}/onesided_{method_one}_vs_others_B{B}_reps_{reps}.csv')
-
-    df = results_df[results_df['nan_perc_m1'] + results_df['nan_perc_m2'] == 0] if skip_nans else results_df
-
-    # counting ns/methods that occur more than 50%
-    df_bad = df[df['better_cov_prob'] < 0.5]
-    df_bad['method'].value_counts()
-
-    # mean probability by grouping
-    df_mean = df[['stat', 'n', 'method', 'better_cov_prob']].groupby(['stat', 'n', 'method']).mean()        # df_bad?
-
-    bad_n = df_bad[['method', 'n']].value_counts()
-    bad_d = df_bad[['method', 'dgp']].value_counts()
-    bad_s = df_bad[['method', 'stat']].value_counts()
-    bad_ns = df_bad[['method', 'n', 'stat']].value_counts()
-
-
 def analyze_experiments(method_one, name, other_methods=None, result_folder='results', statistics=None,
                         ns=None, separate_dgp='coverage', sided='onesided'):
     # USING THIS ONE FOR STEP 2
     df = pd.read_csv(f'{result_folder}/{sided}_{method_one}_{name}_nonans.csv')
-    # df_bad = df[df['m2_better_kl'] | (((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df['better_dist_prob']<0.1))]
 
     if statistics is not None:
         df = df[df['stat'].isin(statistics)]
@@ -337,18 +524,6 @@ def analyze_experiments(method_one, name, other_methods=None, result_folder='res
     bad_dist = df[(((df['m2_better_kl'] + df['m1_better_kl']) < 1) & (df[f'better_{n2}_m2']))]
 
     if bad_dist.shape[0] > 0:
-        bad_s = compute_bad_s(bad_dist)
-        # bad_s = pd.DataFrame()
-        # bad_s['nr_better'] = bad_dist[['method', 'stat']].value_counts()
-        # bad_s['perc_better'] = bad_s['nr_better'] / df[['method', 'stat']].value_counts()
-        # bad_s = bad_s.sort_values('perc_better', ascending=False)
-        # for method, stat in bad_s.index:
-        #     # for alpha in sorted(df_bad['alpha'].unique()):
-        #     for dgp in sorted(bad_dist['dgp'].unique()):
-        #         bad_s.loc[(method, stat), dgp] = ', '.join(str(n) for n in
-        #                                                      sorted(bad_dist[(bad_dist['method'] == method) &
-        #                                                                    (bad_dist['stat'] == stat) &
-        #                                                                    (bad_dist['dgp'] == dgp)]['n'].unique()))
 
         results['distance'] = bad_s
 
@@ -379,10 +554,6 @@ def analyze_experiments(method_one, name, other_methods=None, result_folder='res
                            np.sqrt(df[df['dgp'] == dgp][['method', 'stat']].value_counts())
         bad_s['nr_exp'] = df[df['dgp'] == dgp][['method', 'stat']].value_counts()
         bad_s = bad_s.sort_values('perc_better', ascending=False)
-
-        bad_n = pd.DataFrame(df_bad[['method', 'n']].value_counts())
-        bad_d = pd.DataFrame(df_bad[['method', 'dgp']].value_counts())
-        bad_ns = pd.DataFrame(df_bad[['method', 'n', 'stat']].value_counts())
 
         for method, stat in bad_s.index:
             for alpha in sorted(df_bad['alpha'].unique()):
@@ -441,6 +612,24 @@ if __name__ == '__main__':
     methods = ['standard', 'double', 'studentized']
     name = 'vs_others_B1000_reps_10000_d50'
 
+    # tables = {}
+    # onlybts = True
+    #
+    # for stat in ['mean', 'median']:
+    #     print('Aggregated with ', stat)
+    #
+    #     for table, name in zip(aggregate_results(f'results{folder_add}', combined_with=stat, withnans=True,
+    #                                              onlybts=onlybts),
+    #                            ['nans', 'kl div', 'kl div med', 'kl div rank',
+    #                            'kl div se', 'kl rank se', 'kl_div_significant', 'kl_rank_significant']):
+    #         print(name)
+    #         if 'rank' in name:
+    #             ff = "%.2f"
+    #         else:
+    #             ff = "%.4f"
+    #         print(table.to_latex(float_format=ff))
+    #         tables[name] = table
+
 
     # for m in methods:
     #
@@ -465,5 +654,13 @@ if __name__ == '__main__':
     # if you want to add latex table for percentage of better methods (n)
     # merged_df = pd.concat([rd['mag_n'], rs['mag_n']], axis=1, keys=['double', 'standard'])
     # print(merged_df.to_latex(float_format="%.2f", na_rep=0))
+
+
+    # largest se of experiment distance estimation
+    # df = pd.read_csv(f'results_final/results_from_intervals_mean_withnans.csv')
+    # df['se_rel'] = df['std'] / 100 / df['avg_distance']
+    # test = df.nlargest(n=50, columns=['se_rel'])
+    # test_d = df[df['method'] == 'double'].nlargest(n=50, columns=['se_rel'])
+    # test_s = df[df['method'] == 'standard'].nlargest(n=50, columns=['se_rel'])
 
 
