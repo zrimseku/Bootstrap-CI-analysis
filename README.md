@@ -64,6 +64,16 @@ $\left[\begin{array}{ccc}
 10 & 0\\
 0 & 5
 \end{array}\right]$
+$$
+\begin{pmatrix}
+0.8944272 & 0.4472136\\
+-0.4472136 & -0.8944272
+\end{pmatrix}
+\begin{pmatrix}
+10 & 0\\ 
+0 & 5
+\end{pmatrix}
+$$
 
 ## Framework
 To compare the methods we used two criteria: *accuracy* and *correctness*. Accuracy is the more important one, telling 
