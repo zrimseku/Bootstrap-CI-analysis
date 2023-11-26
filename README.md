@@ -2,11 +2,11 @@
 **Comparison of different methods for confidence interval calculation.**
 
 ## Table of contents
-[Abstract](#abstract)
-[Methods](#methods)
-[Results](#results)
-[Reproducibility](#reproducibility)
-[Additional results](#additional-results)
+- [Abstract](#abstract)
+- [Methods](#methods)
+- [Results](#results)
+- [Reproducibility](#reproducibility)
+- [Additional results](#additional-results)
 
 # Abstract
 Quantifying uncertainty is a vital part of every statistical study. There are many different methods, but in the hands 
