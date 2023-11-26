@@ -16,13 +16,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 import bootstrap_ci as boot
-from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPBernoulli, DGPCategorical, \
-    DGPRandEff
-from R_functions import psignrank_range
+from generators import DGP, DGPNorm, DGPExp, DGPBeta, DGPBiNorm, DGPLogNorm, DGPLaplace, DGPRandEff
 
 # TODO set correct R folder
-# os.environ['R_HOME'] = "C:/Users/ursau/AppData/Local/Programs/Anaconda/envs/bootstrap/lib/R"        # doma
-os.environ['R_HOME'] = "C:/Anaconda3/envs/bootstrapci/lib/R"                                        # lab
+os.environ['R_HOME'] = "C:/Users/ursau/AppData/Local/Programs/Anaconda/envs/bootstrap/lib/R"
 
 import rpy2
 import rpy2.robjects as robjects
@@ -56,8 +53,8 @@ class CompareIntervals:
         if sampling == 'hierarchical':
             self.sampling_parameters = sampling_parameters
             if group_sizes is None:
-                max_groups_l1 = np.random.randint(2, min(5, int(self.n / 2) + 1))  # TODO smarter selection, 3 levels
-                self.group_sizes = [max_groups_l1, 2 * self.n / max_groups_l1]  # TODO max_group_sizes when needed
+                max_groups_l1 = np.random.randint(2, min(5, int(self.n / 2) + 1))
+                self.group_sizes = [max_groups_l1, 2 * self.n / max_groups_l1]
             else:
                 self.group_sizes = group_sizes
             self.gt_variance = sum(np.array(self.dgp.stds) ** 2)     # ground truth variance
@@ -82,7 +79,6 @@ class CompareIntervals:
             for a, ci in zip(self.alphas, cis):
                 self.computed_intervals[method][a].append(ci)
             self.times[method].append(time.time() - t + ts)
-            # print('finished', method)
         return bts
 
     def compute_bootstrap_intervals_hierarchical(self, data: np.array, group_indices: list):
@@ -130,7 +126,6 @@ class CompareIntervals:
                     for a, ci in zip(self.alphas, cis):
                         self.computed_intervals[method_str][a].append(ci)
                     self.times[method_str].append(time.time() - t + ts)
-                    # print('finished', method_str)
                 btss.append(bts)
         return btss
 
@@ -169,7 +164,6 @@ class CompareIntervals:
                     ci_r, achieved_a = r_f(data, a)
 
                     if abs(achieved_a[0] - a) > a/2:        # R criteria for saying that conf level is not achievable
-                        # TODO get correct criteria, decide what to do
                         ci_r[0] = np.nan
                     ci[method].append(ci_r[0])
                 self.times[method].append(time.time() - t)
@@ -196,7 +190,6 @@ class CompareIntervals:
             elif method == 'maritz-jarrett':
                 t = time.time()
                 quant = 0.5 if self.statistic.__name__ == 'median' else int(self.statistic.__name__.split('_')[1])/100
-                # can't choose 0.5
                 ci[method] = [scipy.stats.mstats.mquantiles_cimj(data, prob=quant, alpha=abs(2*a-1))[int(a > 0.5)][0]
                               for a in self.alphas]
                 self.times[method].append(time.time() - t)
@@ -213,9 +206,6 @@ class CompareIntervals:
                 res = scipy.stats.pearsonr(data[:, 0], data[:, 1], alternative='less')
                 ci[method] = [res.confidence_interval(a).high for a in self.alphas]
                 self.times[method].append(time.time() - t)
-
-            else:
-                raise ValueError('Wrong method!!')      # should never happen, just here as a code check
 
         for m in ci.keys():
             if m not in self.methods:
@@ -313,7 +303,7 @@ class CompareIntervals:
         return self.coverages, times_stats
 
     def draw_intervals(self, alphas_to_draw: list[float], show=False):
-        # only implemented for nonparametric sampling, I think we don't need it for hierarchical
+        # only implemented for nonparametric sampling, we don't need it for hierarchical
         data = self.dgp.sample(sample_size=self.n)
         self.alphas = np.union1d(self.alphas, alphas_to_draw)
 
@@ -322,8 +312,6 @@ class CompareIntervals:
 
         # compute non-bootstrap intervals
         self.compute_non_bootstrap_intervals(data)
-
-        # print({m: [self.computed_intervals[m][a][-1] for a in alphas_to_draw] for m in self.methods})
 
         # exact intervals calculation
         if not np.array([a in self.inverse_cdf for a in alphas_to_draw]).all():
@@ -335,7 +323,7 @@ class CompareIntervals:
         plt.hist(bts.statistic_values, bins=30, label='statistic')
         if 'smoothed' in self.methods:
             if np.nan in bts.statistic_values_noise or np.inf in bts.statistic_values_noise:
-                print('skipped drawing of smoothed values because of nan values.')      # TODO why are they here?
+                print('skipped drawing of smoothed values because of nan values.')
             else:
                 plt.hist(bts.statistic_values_noise, bins=30, label='smoothed stat.', alpha=0.3)
         for method in self.methods:
@@ -387,12 +375,12 @@ class CompareIntervals:
         df_length = pd.DataFrame({m: v[-repetitions:] for m, v in zip(self.lengths.keys(), self.lengths.values())})
         df_times = pd.DataFrame({m: v[-repetitions:] for m, v in zip(self.times.keys(), self.times.values())})
 
-        # times are for all alphas combined TODO: divide them?
+        # times are for all alphas combined
 
         true_val = self.dgp.get_true_value(self.statistic.__name__)
 
-        # TODO fix variance saving for hierarchical methods (not made for wide table, so still saving long)
         if self.sampling == 'hierarchical':
+            # saving long table for hierarchical
             df_intervals = pd.DataFrame([{'method': m, 'alpha': a, 'predicted': v, 'true_value': true_val}
                                          for m in self.computed_intervals.keys() for a in
                                          self.computed_intervals[m].keys()
@@ -416,7 +404,7 @@ class CompareIntervals:
                                                         for _ in self.computed_intervals[m].keys()])
 
         else:
-            # saving wide table for nonparametric sampling
+            # saving wide table for nonparametric sampling because of memory issues
             df_intervals = pd.DataFrame([{'alpha': a, 'true_value': true_val} |
                                          {m: self.computed_intervals[m][a][i] for m in self.computed_intervals.keys()}
                                          for a in self.alphas for i in range(repetitions)])
@@ -453,7 +441,7 @@ def compute_hierarchical_var(bts):
         random_effects.append(lvl_std)
         indices = list(itertools.chain.from_iterable(indices))
 
-    # calculate E[Var] (and E[Cov]?)
+    # calculate E[Var]
     evar = 0
     for gs, re in zip(group_sizes, random_effects):
         evar += (bts.n**2 - sum(np.array(gs)**2)) / bts.n**2 * re**2
@@ -464,37 +452,6 @@ def compute_hierarchical_var(bts):
     evar2 = np.var(values, axis=1)
 
     return evar             # mean/95CI ??
-
-
-def compare_bootstraps_with_library_implementations(data, statistic, methods, B, alpha):
-    for method in methods:
-        print(method)
-
-        # initializations
-        b_arch = boot_arch(data)
-        if method == 'standard':
-            ma = 'norm'
-        elif method == 'smoothed':
-            # change to percentile because smoothed is not implemented
-            ma = 'percentile'
-        else:
-            ma = method
-        ci_arch = b_arch.conf_int(statistic, B, method=ma, size=alpha)
-        print(f'Arch: {ci_arch[:, 0]}')
-
-        if method in ['basic', 'percentile', 'bca']:
-            # only these are implemented in scipy
-            b_sci = boot_sci((data,), statistic, n_resamples=B, confidence_level=alpha, method=method,
-                             vectorized=False)
-            ci_sci = b_sci.confidence_interval
-            print(f'Scipy: {[ci_sci.low, ci_sci.high]}')
-
-        our = Bootstrap(data, statistic)
-        our_ci = our.ci(coverages=[alpha], nr_bootstrap_samples=B, method=method)  # , seed=0)
-        # our.plot_bootstrap_distribution()
-        print(f'Our: {our_ci}')
-
-        print('_____________________________________________________________________')
 
 
 def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, alphas_to_draw=[0.05, 0.95],
@@ -556,12 +513,6 @@ def run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns=None, 
                 continue
 
             for n in ns:
-
-                # # TODO DELETE
-                # if (statistic.__name__ == 'corr' and 8 < n) or \
-                #         (statistic.__name__ == 'median' and 4 < n) or \
-                #         (statistic.__name__ == 'percentile_5' and 16 < n):
-                #     continue
 
                 for B in Bs:
 
@@ -682,14 +633,13 @@ def percentile_95(data):
 
 if __name__ == '__main__':
 
+    # non-parametric experiments
     seed = 0
     alphas = [0.025, 0.05, 0.25, 0.75, 0.95, 0.975]
 
-    # methods = ['percentile', 'bca', 'double']
     methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
 
     dgps = [DGPNorm(seed, 0, 1), DGPExp(seed, 1), DGPBeta(seed, 1, 1), DGPBeta(seed, 10, 2),
-            # DGPBernoulli(seed, 0.5), DGPBernoulli(seed, 0.95),
             DGPLaplace(seed, 0, 1), DGPLogNorm(seed, 0, 1),
             DGPBiNorm(seed, np.array([1, 1]), np.array([[2, 0.5], [0.5, 1]]))]
     statistics = [np.mean, np.median, np.std, percentile_5, percentile_95, corr]
@@ -701,15 +651,14 @@ if __name__ == '__main__':
     run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, ns, nr_processes=24, dont_repeat=True,
                    append=False, sampling='nonparametric')
 
-    # leaves = [2, 4, 8, 16, 32]
-    # branches = [1, 3, 5, 7]
-    # stds = [0.1, 1, 10]
-    # # stds = [1]
-    # levels = [2, 3, 4]
-    # # levels = [2, 3]
-    # dgps = [DGPRandEff(seed, 0, [s for l in range(n_lvl)]) for n_lvl in levels for s in stds]
+    # hierarchical experiments
+    leaves = [2, 4, 8, 16, 32]
+    branches = [1, 3, 5, 7]
+    stds = [0.1, 1, 10]
+    levels = [2, 3, 4]
+    dgps = [DGPRandEff(seed, 0, [s for l in range(n_lvl)]) for n_lvl in levels for s in stds]
 
-# run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, leaves=leaves, branches=branches, nr_processes=24,
-#                dont_repeat=True, append=True, sampling='hierarchical')
+    run_comparison(dgps, statistics, Bs, methods, alphas, repetitions, leaves=leaves, branches=branches,
+                   nr_processes=24, dont_repeat=True, append=False, sampling='hierarchical')
 
 

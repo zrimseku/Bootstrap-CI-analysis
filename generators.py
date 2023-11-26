@@ -2,8 +2,6 @@ import itertools
 
 import numpy as np
 import scipy.stats
-from tqdm import tqdm
-from scipy.stats import norm
 
 
 class DGP:
@@ -171,7 +169,6 @@ class DGPCategorical(DGP):
             self.true_statistics = {}
         self.true_statistics['mean'] = np.sum(pvals * np.array(range(len(pvals))))
         self.true_statistics['median'] = np.where(np.cumsum(pvals) > 0.5)[0][0]
-        # self.true_statistics['std'] = (pvals * (1 - pvals)) ** 0.5 ???
         self.true_statistics['percentile_5'] = np.where(np.cumsum(pvals) > 0.05)[0][0]
         self.true_statistics['percentile_95'] = np.where(np.cumsum(pvals) > 0.95)[0][0]
 
@@ -191,11 +188,9 @@ class DGPBiNorm(DGP):
         self.cov = cov          # covariance matrix, 2D array (2x2)
         if true_statistics is None:
             self.true_statistics = {}
-        self.true_statistics['mean'] = mean                         # TODO do we need any of these (for now just corr)
+        self.true_statistics['mean'] = mean
         self.true_statistics['median'] = mean
         self.true_statistics['std'] = np.diag(cov) ** 0.5
-        # self.true_statistics['5_percentile'] = loc - 1.645 * scale     # TODO do we need percentiles??
-        # self.true_statistics['95_percentile'] = loc + 1.645 * scale
         self.true_statistics['corr'] = cov[0, 1] / (cov[0, 0] * cov[1, 1]) ** 0.5   # extend it to multiple??
 
     def sample(self, sample_size: int, nr_samples: int = 1) -> np.array:
@@ -218,13 +213,11 @@ class DGPRandEff(DGP):
             self.true_statistics = {}
         self.true_statistics['mean'] = mean
         self.true_statistics['median'] = mean
-        self.true_statistics['std'] = stds  # TODO this depends on strategy, what to do? also other statistics
+        self.true_statistics['std'] = stds
         self.group_sizes = None
 
     def sample(self, sample_size: int = None, nr_samples: int = 1, group_sizes: list = None,
                max_group_sizes: list = None) -> np.array:
-        # TODO if nr_samples != 1, all samples have the same group_sizes -> OK? pomoje ne
-        # TODO 2: drugačno samplanje da vemo groud truth skupin??
         if group_sizes is None:
             # we will generate groups on random, based on specified max sizes on each level
             if len(self.stds) != len(max_group_sizes):
@@ -237,7 +230,6 @@ class DGPRandEff(DGP):
                     else:
                         return [get_sizes(max_sizes[1:]) for _ in range(np.random.randint(1, max_sizes[0]))]
                 group_sizes = get_sizes(max_group_sizes)
-                # print(group_sizes)
 
         else:
             # only checking if depths match
@@ -266,16 +258,16 @@ class DGPRandEff(DGP):
         sample_size_true = next(counter)
 
         if sample_size_true != sample_size:
-            if max_group_sizes is None:   # TODO not best way to check this, but group_sizes is not None anymore
-                raise ValueError(f'Actual sample size, obtained from group_sizes ({sample_size_true}) is not the same as '
-                                 f'specified sample_size ({sample_size}).')
+            if max_group_sizes is None:   # not best way to check this, but group_sizes is not None anymore
+                raise ValueError(f'Actual sample size, obtained from group_sizes ({sample_size_true}) is not the same '
+                                 f'as specified sample_size ({sample_size}).')
             else:
                 # group sizes are random, so they are probably not the same as specified sample_size. No error.
                 if sample_size is not None:
                     print(f'Actual sample size, obtained from group_sizes ({sample_size_true}) is not the same as '
                           f'specified sample_size ({sample_size}).')
 
-        size = (nr_samples, sample_size)        # TODO: a bi blo bolj smiselno spremenit tole v true_sample_size?? error
+        size = (nr_samples, sample_size)
         data = np.zeros(size) + self.mean
 
         def add_variance(indices, data, depth, varr):
@@ -286,7 +278,6 @@ class DGPRandEff(DGP):
                     # self.stds can be lists on each level if we want to set each groups std differently
                     if self.stds[depth] is None:
                         s = np.random.uniform(0, 1, size=nr_samples)
-                        # print(depth, s)
                     elif isinstance(self.stds[depth], int) or isinstance(self.stds[depth], float):
                         s = self.stds[depth]
                     else:
@@ -301,18 +292,10 @@ class DGPRandEff(DGP):
         add_variance(self.group_indices, data, 0, 0)
 
         if nr_samples == 1:
-            return data[0]      # remove unnecessary parenthesis
+            return data[0]      # removes unnecessary parenthesis
         else:
             return data
 
     def describe(self):
         return type(self).__name__ + '_' + str(self.mean)
-
-
-if __name__ == '__main__':
-    dgp = DGPRandEff(1, 0, [100, None, 1, 0.1])
-    print(dgp.sample(max_group_sizes=[3, 4, 5, 4], nr_samples=3, sample_size=10))
-    print(dgp.group_sizes)
-    print(dgp.describe())
-
 
