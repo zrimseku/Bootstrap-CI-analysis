@@ -47,7 +47,7 @@ We used the following distributions:
 - exponential with $\lambda = 1$,
 - log-normal with $\mu = 0, \sigma = 1$
 - bi-normal with $\mu = \[1, 1\]^T$ 
-            and $\Sigma = \[2 0.5; 0.5 1\]$.
+            and $\Sigma = \[2, 0.5; 0.5, 1\]$.
   
 We used samples of sizes $n \in \{4, 8, 16, 32, 64, 128, 256\}$ randomly generated from these distributions to estimate 
 confidence intervals for the *mean*, *median*, *standard deviation*, *5<sup>th</sup>* and *95<sup>th</sup> percentile* and *correlation*.
