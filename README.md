@@ -1,7 +1,12 @@
 # Bootstrap-CI-analysis
 **Comparison of different methods for confidence interval calculation.**
 
-# Table of contents
+## Table of contents
+[Abstract](#abstract)
+[Methods](#methods)
+[Results](#results)
+[Reproducibility](#reproducibility)
+[Additional results](#additional-results)
 
 # Abstract
 Quantifying uncertainty is a vital part of every statistical study. There are many different methods, but in the hands 
@@ -81,7 +86,7 @@ In short, we answered to the above steps:
 We recommend using the strategy that samples with replacement on all levels, as it has the best accuracy, and it best
 mimics the DGP's variational properties.
 
-# Reproducibility and custom experiments
+# Reproducibility
 Data generating processes used are implemented in the file `generators.py`, where you can also add your custom DGP, by
 extending the `DGP` class. 
 
