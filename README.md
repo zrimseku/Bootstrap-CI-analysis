@@ -46,30 +46,12 @@ We used the following distributions:
 - beta with $\alpha = 2, \beta = 10$,
 - exponential with $\lambda = 1$,
 - log-normal with $\mu = 0, \sigma = 1$
-- bi-normal with $\mu = 
-            \begin{bmatrix}
-            1 \\
-            1
-            \end{bmatrix}$ 
-            and $\Sigma = 
-            \begin{bmatrix}
-            2 & 0.5\\
-            0.5 & 1
-            \end{bmatrix}$.
+- bi-normal with $\mu = \[1, 1\]^T$ 
+            and $\Sigma = \[2 0.5; 0.5 1\]$.
   
 We used samples of sizes $n \in \{4, 8, 16, 32, 64, 128, 256\}$ randomly generated from these distributions to estimate 
 confidence intervals for the *mean*, *median*, *standard deviation*, *5<sup>th</sup>* and *95<sup>th</sup> percentile* and *correlation*.
 We were interested in confidence levels $\alpha \in {0.025, 0.05, 0.25, 0.75, 0.95, 0.975}$.
-$$
-\left(\begin{array}{cc} 
-0.8944272 & 0.4472136\\
--0.4472136 & -0.8944272
-\end{array}\right)
-\left(\begin{array}{cc} 
-10 & 0\\ 
-0 & 5
-\end{array}\right)
-$$ 
 
 ## Framework
 To compare the methods we used two criteria: *accuracy* and *correctness*. Accuracy is the more important one, telling 
