@@ -41,7 +41,7 @@ Data generating processes used are implemented in the file `generators.py`, wher
 extending the `DGP` class. 
 We used the following distributions:
 - standard normal,
-- uniform from 0 to 1,
+- uniform from $0$ to $1$,
 - Laplace with $\mu = 0, b = 1$,
 - beta with $\alpha = 2, \beta = 10$,
 - exponential with $\lambda = 1$,
@@ -58,8 +58,8 @@ We used the following distributions:
             \end{bmatrix}$.
   
 We used samples of sizes $n \in \{4, 8, 16, 32, 64, 128, 256\}$ randomly generated from these distributions to estimate 
-confidence intervals for the *mean*, *median*, *standard deviation*, *5^{th}* and *95^{th} percentile* and *correlation*.
-We were interested in confidence levels $\alpha \in {0.025, 0.05, 0.25, 0.75, 0.95, 0.975}.
+confidence intervals for the *mean*, *median*, *standard deviation*, *5^\{th\}* and *95^{th} percentile* and *correlation*.
+We were interested in confidence levels $\alpha \in {0.025, 0.05, 0.25, 0.75, 0.95, 0.975}$.
 
 ## Framework
 To compare the methods we used two criteria: *accuracy* and *correctness*. Accuracy is the more important one, telling 
