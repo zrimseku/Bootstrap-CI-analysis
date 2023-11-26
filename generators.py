@@ -258,7 +258,7 @@ class DGPRandEff(DGP):
             if isinstance(sizes, int):
                 return [next(cnt) for _ in range(sizes)]
             else:
-                return [get_indices(sizes[j], cnt) if isinstance(sizes[j], int) else            # TODO wtf a ni isto
+                return [get_indices(sizes[j], cnt) if isinstance(sizes[j], int) else
                         get_indices(sizes[j], cnt) for j in range(len(sizes))]
 
         self.group_indices = get_indices(group_sizes, counter)
@@ -278,10 +278,9 @@ class DGPRandEff(DGP):
         size = (nr_samples, sample_size)        # TODO: a bi blo bolj smiselno spremenit tole v true_sample_size?? error
         data = np.zeros(size) + self.mean
 
-        def add_error(indices, data, depth, err):
-            # TODO: to ni zares error, ampak varianca, zakaj ga tko imenuješ?
+        def add_variance(indices, data, depth, varr):
             if isinstance(indices, int):
-                data[:, indices] += err
+                data[:, indices] += varr
             else:
                 for i in range(len(indices)):
                     # self.stds can be lists on each level if we want to set each groups std differently
@@ -297,9 +296,9 @@ class DGPRandEff(DGP):
                                 f'level ({len(self.stds[depth])}) should coincide with the number of groups '
                                 f'of the level ({len(indices)}).')
                         s = self.stds[depth][i]
-                    add_error(indices[i], data, depth + 1, err + np.random.normal(0, s, size=nr_samples))
+                    add_variance(indices[i], data, depth + 1, varr + np.random.normal(0, s, size=nr_samples))
 
-        add_error(self.group_indices, data, 0, 0)
+        add_variance(self.group_indices, data, 0, 0)
 
         if nr_samples == 1:
             return data[0]      # remove unnecessary parenthesis
