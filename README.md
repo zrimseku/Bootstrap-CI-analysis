@@ -69,21 +69,21 @@ method gives better one-sided confidence interval estimations.
 3. Repeating step 2. for two-sided confidence intervals.
 
 ## Hierarchical bootstrap
-We compared different strategies of the *cases* bootstrap based on their accuracy and ability to mimic the DGP's 
-variational properties.
+We compared different strategies of the *cases* bootstrap based on their **accuracy** and **ability to mimic** the DGP's 
+**variational properties**.
 
 # Results
 More detailed results can again be found in the thesis, in chapter 4.
 In short, we answered to the above steps:
 1. The best general bootstrap method is the **double** bootstrap. Additionally we recommend to use the **standard** 
    bootstrap when estimating confidence intervals of extreme percentiles.
-2. There is no method (bootstrap or traditional) that would have significantly better accuracy in most of the 
-   repetitions for experiments on any DGP. Only for the correlation, Fisher's method is equally accurate but more
-   correct.
-3. Results for two-sided intervals have the same conclusions.
+2. There is **no method** (bootstrap or traditional) that would have **significantly better accuracy** in most of the 
+   repetitions for experiments on any DGP. Only for the correlation, **Fisher's method** is equally accurate but **more
+   correct**.
+3. Results for **two-sided intervals** have the **same conclusions**.
 
 ## Hierarchical bootstrap
-We recommend using the strategy that samples with replacement on all levels, as it has the best accuracy, and it best
+We recommend using the strategy that samples **with replacement on all levels**, as it has the best accuracy, and it best
 mimics the DGP's variational properties.
 
 # Reproducibility
