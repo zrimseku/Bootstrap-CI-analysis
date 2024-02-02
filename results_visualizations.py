@@ -117,8 +117,8 @@ def compare_cov_dis_grid(df=None, comparing='coverage', filter_by={'alpha': [0.9
         plt.savefig(f'images{folder_add}/comparison/{subfolder}/compare_{comparing}_{x}_{row}_{col}_{save_add}.png')
         print('saved')
         plt.close()
-    else:
-        plt.show()
+    # else:
+    #     plt.show()
 
 
 def plot_coverage_bars(data, **kwargs):
@@ -146,8 +146,10 @@ def plot_coverage_bars(data, **kwargs):
     for i, method in enumerate(kwargs['order']):
         data_m = data[data[kwargs['hue']] == method]
         offset = bar_pos + offsets[i]
-        # if data_m['ci'].shape[0] == 0:
-        #     continue
+        if data_m['ci'].shape[0] == 0:
+            continue
+        if data_m.shape[0] == 0:
+            debug = True
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m[cov_kind], label=method, color=colors[method],
                 ec=colors[method])
         plt.bar(offset, data_m['ci'], bar_width, bottom=data_m['low'], color=colors[method], ec=colors[method])
