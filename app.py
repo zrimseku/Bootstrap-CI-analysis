@@ -17,8 +17,9 @@ df = df[df['B'] == 1000]
 print(df.shape)
 selectable_cols = ['Confidence level', 'Statistic', 'Distribution']
 methods = df["method"].unique().tolist()
-alphas = df["alpha"].unique().tolist()
-alphas.sort()
+alphas1 = df["alpha"].unique().tolist()
+alphas1.sort()
+alphas2 = [b - a for a, b in zip(alphas1[:len(alphas1)//2], alphas1[len(alphas1)//2:])]
 statistics = df["statistic"].unique().tolist()
 distributions = df["dgp"].unique().tolist()
 
@@ -30,7 +31,7 @@ app_ui = ui.page_sidebar(
         ),
         ui.panel_conditional(
             "input.xgrid === 'Confidence level'", ui.input_checkbox_group(
-                "alphas_x", "Confidence levels", alphas, selected=alphas
+                "alphas_x", "Confidence levels", alphas1, selected=alphas1
             )),
         ui.panel_conditional(
             "input.xgrid === 'Statistic'", ui.input_checkbox_group(
@@ -45,7 +46,7 @@ app_ui = ui.page_sidebar(
         ),
         ui.panel_conditional(
             "input.ygrid === 'Confidence level'", ui.input_checkbox_group(
-                "alphas_y", "Confidence levels", alphas, selected=alphas
+                "alphas_y", "Confidence levels", alphas1, selected=alphas1
             )),
         ui.panel_conditional(
             "input.ygrid === 'Statistic'", ui.input_checkbox_group(
@@ -57,7 +58,7 @@ app_ui = ui.page_sidebar(
             )),
         ui.panel_conditional(
             "input.xgrid != 'Confidence level' & input.ygrid != 'Confidence level'", ui.input_selectize(
-            "alpha", "Confidence level", alphas, selected=0.95
+            "alpha", "Confidence level", alphas1, selected=0.95
             )),
         ui.panel_conditional(
             "input.xgrid != 'Statistic' & input.ygrid != 'Statistic'", ui.input_selectize(
@@ -115,7 +116,10 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.Effect
     def update_choices():
         """Updates possible choices based on selected values."""
-        # TODO
+        if input.sided() == '1':
+            ui.update_selectize('alphas', choices=alphas1)
+        else:
+            ui.update_selectize('alphas', choices=alphas2)
 
         if 'Statistic' not in [input.xgrid(), input.ygrid()]:
             bootstrap_methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
@@ -161,11 +165,19 @@ def server(input: Inputs, output: Outputs, session: Session):
                                     ['alpha', 'statistic', 'dgp', None, None]))
 
             filters = {'method': input.methods()}
-            if 'Confidence level' not in [input.xgrid(), input.ygrid()]:
+            if 'Confidence level' == input.xgrid():
+                filters['alpha'] = [float(a) for a in input.alphas_x()]
+            elif 'Confidence level' == input.ygrid():
+                filters['alpha'] = [float(a) for a in input.alphas_y()]
+            else:
                 filters['alpha'] = [float(input.alpha())]
-            if 'Statistic' not in [input.xgrid(), input.ygrid()]:
+            if 'Statistic' in [input.xgrid(), input.ygrid()]:
+                filters['statistic'] = [input.statistics_x() if 'Statistic' == input.xgrid() else input.statistics_y()]
+            else:
                 filters['statistic'] = [input.statistic()]
-            if 'Distribution' not in [input.xgrid(), input.ygrid()]:
+            if 'Distribution' in [input.xgrid(), input.ygrid()]:
+                filters['distribution'] = [input.distributions_x() if 'Statistic' == input.xgrid() else input.distributions_y()]
+            else:
                 filters['dgp'] = [input.distribution()]
 
             compare_cov_dis_grid(df=current_df, comparing='coverage', filter_by=filters, x='n',
