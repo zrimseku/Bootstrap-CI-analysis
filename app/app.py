@@ -215,6 +215,12 @@ def server(input: Inputs, output: Outputs, session: Session):
             ui.update_checkbox_group('methods', choices=possible_methods,
                                      selected=[m for m in possible_methods if m in selected_methods])
 
+            # setting correct distributions for selected statistic
+            possible_dist = [d for d in distributions if d[:9] != 'DGPBiNorm'] if input.statistic() != 'corr' else \
+                [d for d in distributions if d[:9] == 'DGPBiNorm']
+            selected_dist_possible = input.distribution() in possible_dist
+            ui.update_selectize('distribution', choices=possible_dist,
+                                selected=input.distribution() if selected_dist_possible else possible_dist[0])
 
         # not possible to select the same dimension on the X and Y axis of the grid
         if input.xgrid() != 'No X grid':
