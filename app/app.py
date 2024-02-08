@@ -15,6 +15,8 @@ df = pd.read_csv(Path(__file__).parent / "coverage.csv", na_values="NA")
 df = df[df['B'] == 1000]
 print(df.shape)
 selectable_cols = ['Confidence level', 'Statistic', 'Distribution']
+sel_cols_y = selectable_cols + ["No Y grid"]
+sel_cols_x = selectable_cols + ["No X grid"]
 methods = df["method"].unique().tolist()
 alphas1 = df["alpha"].unique().tolist()
 alphas1.sort()
@@ -26,7 +28,7 @@ app_ui = ui.page_sidebar(
     ui.sidebar(
         ui.input_radio_buttons("sided", "Confidence intervals", {"1": "One-sided", "2": "Two-sided"}),
         ui.input_selectize(
-            "xgrid", "X grid", selectable_cols + ["No X grid"], selected="No X grid"
+            "xgrid", "X grid", sel_cols_x, selected="No X grid"
         ),
         ui.panel_conditional(
             "input.xgrid === 'Confidence level'", ui.input_checkbox_group(
@@ -41,7 +43,7 @@ app_ui = ui.page_sidebar(
                 "distributions_x", "Distributions", distributions, selected=distributions
             )),
         ui.input_selectize(
-            "ygrid", "Y grid", selectable_cols + ["No Y grid"], selected="No Y grid"
+            "ygrid", "Y grid", sel_cols_y, selected="No Y grid"
         ),
         ui.panel_conditional(
             "input.ygrid === 'Confidence level'", ui.input_checkbox_group(
@@ -192,11 +194,14 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.Effect
     def update_choices():
         """Updates possible choices based on selected values."""
+
+        # setting correct alphas for one or two-sided intervals
         if input.sided() == '1':
             ui.update_selectize('alpha', choices=alphas1)
         else:
             ui.update_selectize('alpha', choices=alphas2)
 
+        # setting correct methods for each statistic
         if 'Statistic' not in [input.xgrid(), input.ygrid()]:
             bootstrap_methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
             other_methods = {'mean': ['wilcoxon', 'ttest'], 'std': ['chi_sq'],
@@ -209,6 +214,22 @@ def server(input: Inputs, output: Outputs, session: Session):
             selected_methods = input.methods()
             ui.update_checkbox_group('methods', choices=possible_methods,
                                      selected=[m for m in possible_methods if m in selected_methods])
+
+
+        # not possible to select the same dimension on the X and Y axis of the grid
+        if input.xgrid() != 'No X grid':
+            ui.update_selectize('ygrid', choices=[c for c in sel_cols_y if c != input.xgrid()],
+                                selected=input.ygrid())
+        else:
+            ui.update_selectize('ygrid', choices=sel_cols_y, selected=input.ygrid())
+
+        if input.ygrid() != 'No Y grid':
+            ui.update_selectize('xgrid', choices=[c for c in sel_cols_x if c != input.ygrid()],
+                                selected=input.xgrid())
+        else:
+            ui.update_selectize('xgrid', choices=sel_cols_x, selected=input.xgrid())
+
+
 
     @reactive.Calc
     def filtered_df() -> pd.DataFrame:
