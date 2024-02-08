@@ -75,7 +75,7 @@ app_ui = ui.page_sidebar(
         # ui.input_switch("show_margins", "Show marginal plots", value=True),
     ),
     ui.card(
-        ui.output_plot("coverages"),
+        ui.output_plot("coverages", height=600, width='100%'),
     ),
 )
 
@@ -161,6 +161,8 @@ def server(input: Inputs, output: Outputs, session: Session):
                 cols = plt.cm.tab10(np.linspace(0.05, 0.95, nm))
             colors = {m: c for (m, c) in zip(current_methods, cols)}
 
+            plt.figure(figsize=(10, 12))
+
             plot_coverage_bars(data=current_df, colors=colors, ci=95, scale='linear', set_ylim=True,
                                order=current_methods, hue='method', x='n')
             # plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: f'{value:.2f}'))
@@ -180,11 +182,11 @@ def server(input: Inputs, output: Outputs, session: Session):
             else:
                 filters['alpha'] = [float(input.alpha())]
             if 'Statistic' in [input.xgrid(), input.ygrid()]:
-                filters['statistic'] = [input.statistics_x() if 'Statistic' == input.xgrid() else input.statistics_y()]
+                filters['statistic'] = input.statistics_x() if 'Statistic' == input.xgrid() else input.statistics_y()
             else:
                 filters['statistic'] = [input.statistic()]
             if 'Distribution' in [input.xgrid(), input.ygrid()]:
-                filters['distribution'] = [input.distributions_x() if 'Statistic' == input.xgrid() else input.distributions_y()]
+                filters['dgp'] = input.distributions_x() if 'Statistic' == input.xgrid() else input.distributions_y()
             else:
                 filters['dgp'] = [input.distribution()]
 
@@ -192,6 +194,10 @@ def server(input: Inputs, output: Outputs, session: Session):
                                  row=row_col_dict[input.ygrid()], col=row_col_dict[input.xgrid()],
                                  hue='method', save_add=None, title=None, ci=95, scale='linear',
                                  set_ylim=False, colors=None)
+
+            # plt.legend([], [], frameon=False)
+            # handles, labels = plt.gca().get_legend_handles_labels()
+            # plt.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(1, 0.5))
 
 
 app = App(app_ui, server)
