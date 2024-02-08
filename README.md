@@ -81,6 +81,11 @@ In short, we answered to the above steps:
    repetitions for experiments on any DGP. Only for the correlation, **Fisher's method** is equally accurate but **more
    correct**.
 3. Results for **two-sided intervals** have the **same conclusions**.
+4. 
+
+## Visualizations
+True coverages for separate experiments and comparisons over several dimensions can be observed interactively on 
+[this site](https://zrimseku.github.io/Bootstrap-CI-analysis/).
 
 ## Hierarchical bootstrap
 We recommend using the strategy that samples **with replacement on all levels**, as it has the best accuracy, and it best
