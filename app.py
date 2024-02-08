@@ -19,7 +19,7 @@ selectable_cols = ['Confidence level', 'Statistic', 'Distribution']
 methods = df["method"].unique().tolist()
 alphas1 = df["alpha"].unique().tolist()
 alphas1.sort()
-alphas2 = [b - a for a, b in zip(alphas1[:len(alphas1)//2], alphas1[len(alphas1)//2:])]
+alphas2 = [round(b - a, 5) for a, b in zip(alphas1[:len(alphas1)//2], alphas1[len(alphas1)//2:][::-1])]
 statistics = df["statistic"].unique().tolist()
 distributions = df["dgp"].unique().tolist()
 
@@ -81,45 +81,14 @@ app_ui = ui.page_sidebar(
 
 
 def server(input: Inputs, output: Outputs, session: Session):
-    @reactive.Calc
-    def filtered_df() -> pd.DataFrame:
-        """Returns a Pandas data frame that includes only the desired rows"""
-
-        # This calculation "req"uires that at least one species is selected
-        req(len(input.methods()) > 0)
-
-        fil_df = df.copy()
-        if 'Distribution' not in [input.xgrid(), input.ygrid()]:
-            fil_df = fil_df[(fil_df['dgp'] == input.distribution())]
-        if 'Statistic' not in [input.xgrid(), input.ygrid()]:
-            fil_df = fil_df[(fil_df['statistic'] == input.statistic())]
-        if 'Confidence level' not in [input.xgrid(), input.ygrid()]:
-            fil_df = fil_df[(fil_df['alpha'] == float(input.alpha()))]
-
-        if input.sided() == '2':
-            fil_df2 = df.copy()
-            if 'Distribution' not in [input.xgrid(), input.ygrid()]:
-                fil_df2 = fil_df2[(fil_df2['dgp'] == input.distribution())]
-            if 'Statistic' not in [input.xgrid(), input.ygrid()]:
-                fil_df2 = fil_df2[(fil_df2['statistic'] == input.statistic())]
-            if 'Confidence level' not in [input.xgrid(), input.ygrid()]:
-                fil_df2 = fil_df2[(fil_df2['alpha'] == round(1 - float(input.alpha()), 5))]
-
-            # merge dataframes to be able to subtract coverages of same experiments
-            fil_df = pd.merge(fil_df, fil_df2, on=['method', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
-                              suffixes=('_au', '_al'))
-            fil_df['coverage'] = fil_df['coverage_au'] - fil_df['coverage_al']
-            fil_df['alpha'] = fil_df['alpha_au'] - fil_df['alpha_al']
-
-        return fil_df
 
     @reactive.Effect
     def update_choices():
         """Updates possible choices based on selected values."""
         if input.sided() == '1':
-            ui.update_selectize('alphas', choices=alphas1)
+            ui.update_selectize('alpha', choices=alphas1)
         else:
-            ui.update_selectize('alphas', choices=alphas2)
+            ui.update_selectize('alpha', choices=alphas2)
 
         if 'Statistic' not in [input.xgrid(), input.ygrid()]:
             bootstrap_methods = ['percentile', 'basic', 'bca', 'bc', 'standard', 'smoothed', 'double', 'studentized']
@@ -133,9 +102,44 @@ def server(input: Inputs, output: Outputs, session: Session):
             selected_methods = input.methods()
             ui.update_checkbox_group('methods', choices=possible_methods,
                                      selected=[m for m in possible_methods if m in selected_methods])
-            # other_methods[input.statistic()])
 
-            # ui.update_checkbox, update_select
+    @reactive.Calc
+    def filtered_df() -> pd.DataFrame:
+        """Returns a Pandas data frame that includes only the desired rows"""
+        # This calculation "req"uires that at least one species is selected
+        req(len(input.methods()) > 0)
+
+        fil_df = df.copy()
+        if 'Distribution' not in [input.xgrid(), input.ygrid()]:
+            fil_df = fil_df[(fil_df['dgp'] == input.distribution())]
+        if 'Statistic' not in [input.xgrid(), input.ygrid()]:
+            fil_df = fil_df[(fil_df['statistic'] == input.statistic())]
+
+        if input.sided() == '1':
+            if 'Confidence level' not in [input.xgrid(), input.ygrid()]:
+                fil_df = fil_df[(fil_df['alpha'] == float(input.alpha()))]
+
+        else:
+            al = round((1 - float(input.alpha())) / 2, 5)
+            au = 1 - al
+            if 'Confidence level' not in [input.xgrid(), input.ygrid()]:
+                fil_df = fil_df[fil_df['alpha'] == au]
+
+            fil_df2 = df.copy()
+            if 'Distribution' not in [input.xgrid(), input.ygrid()]:
+                fil_df2 = fil_df2[(fil_df2['dgp'] == input.distribution())]
+            if 'Statistic' not in [input.xgrid(), input.ygrid()]:
+                fil_df2 = fil_df2[(fil_df2['statistic'] == input.statistic())]
+            if 'Confidence level' not in [input.xgrid(), input.ygrid()]:
+                fil_df2 = fil_df2[fil_df2['alpha'] == al]
+
+            # merge dataframes to be able to subtract coverages of same experiments
+            fil_df = pd.merge(fil_df, fil_df2, on=['method', 'dgp', 'statistic', 'n', 'B', 'repetitions'],
+                              suffixes=('_au', '_al'))
+            fil_df['coverage'] = fil_df['coverage_au'] - fil_df['coverage_al']
+            fil_df['alpha'] = fil_df['alpha_au'] - fil_df['alpha_al']
+
+        return fil_df
 
     @output
     @render.plot
@@ -159,6 +163,10 @@ def server(input: Inputs, output: Outputs, session: Session):
 
             plot_coverage_bars(data=current_df, colors=colors, ci=95, scale='linear', set_ylim=True,
                                order=current_methods, hue='method', x='n')
+            # plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: f'{value:.2f}'))
+
+            handles, labels = plt.gca().get_legend_handles_labels()
+            plt.legend(handles, labels, loc='center left', title="Method", bbox_to_anchor=(1, 0.5))
 
         else:
             row_col_dict = dict(zip(selectable_cols + ["No X grid", "No Y grid"],
