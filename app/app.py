@@ -15,8 +15,8 @@ sns.set_theme()
 df = pd.read_csv(Path(__file__).parent / "coverage.csv", na_values="NA")
 df = df[df['B'] == 1000]
 selectable_cols = ['Confidence level', 'Statistic', 'Distribution']
-sel_cols_y = selectable_cols + ["No Y grid"]
-sel_cols_x = selectable_cols + ["No X grid"]
+sel_cols_x = ['Statistic', 'Distribution', "No X grid"]
+sel_cols_y = selectable_cols + ["No Y grid"]            # Confidence level can't be on x axis because of scales
 methods = df["method"].unique().tolist()
 alphas1 = df["alpha"].unique().tolist()
 alphas1.sort()
@@ -197,7 +197,6 @@ def server(input: Inputs):
     @reactive.effect()
     def update_choices():
         """Updates possible choices based on selected values."""
-        print("Updating choices")
         # setting correct alphas for one or two-sided intervals
         if input.sided() == '1':
             ui.update_selectize('alpha', choices=alphas1)
@@ -321,7 +320,6 @@ def server(input: Inputs):
 
     def coverages():
         with reactive.isolate():
-            print("Rendering plot")
             """Generates a plot for Shiny to display to the user"""
             # req(update_choices()) doesn't help (+ needs Effect to Calc)
             # ne dela -> vse kar caka in se updejta gre na stack in se pol izrise. Pogruntat rabim kako lahko izrisem samo
