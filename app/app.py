@@ -191,7 +191,8 @@ def plot_coverage_bars(data, **kwargs):
     ax.set_ylabel(cov_kind)
     plt.xticks(bar_pos, sorted(data[kwargs['x']].unique()))
 
-def server(input: Inputs, output: Outputs, session: Session):
+
+def server(input: Inputs):
 
     @reactive.effect()
     def update_choices():
@@ -381,4 +382,4 @@ def server(input: Inputs, output: Outputs, session: Session):
 
 
 app = App(app_ui, server)
-app.run()
+# app.run()
