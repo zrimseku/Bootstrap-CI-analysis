@@ -81,7 +81,6 @@ In short, we answered to the above steps:
    repetitions for experiments on any DGP. Only for the correlation, **Fisher's method** is equally accurate but **more
    correct**.
 3. Results for **two-sided intervals** have the **same conclusions**.
-4. 
 
 ## Visualizations
 True coverages for separate experiments and comparisons over several dimensions can be observed interactively on 
@@ -108,15 +107,3 @@ The quantitative result analysis is done in file `result_analysis.py`. Results f
 of the best bootstrap method, can be obtained with function `aggregate_results`. Second step results are obtained using
 function `analyze_experiments`. 
 For third step we used the same function only changing the value of the parameter `sided` to `'twosided'`.
-
-# Additional results
-For the sake of brevity, some results were omitted from the thesis or shown for only one experiment.
-
-## Visualization of results for separate experiments
-Plots of results for separate experiments can be seen [here](https://unilj-my.sharepoint.com/:f:/g/personal/uz2273_student_uni-lj_si/EiUyOxbJPHBBrm_me1NFhYkBBbNXr5dCdN6ZBCmnMuOHuA?e=QWIJ2y). There are separate folders for onesided intervals, where the top plot shows methods' true coverage and the bottom plot shows box plots of distances from exact intervals. There are two folders, in one the box plots are shown with and in one without outliers. Same goes for twosided intervals, but there box plots show lenghts of the intervals.
-
-## Comparison of one method vs. others
-[Here](https://unilj-my.sharepoint.com/:f:/g/personal/uz2273_student_uni-lj_si/EnidHNEzj95Eq3SBazhFBbUBIhPfYucwCBrGQwy173Kr4Q?e=eI4ocF) we have folders containing comparison of the method in the folder's name with all other methods. In each of the folders you can see the percentages where a certain method was better, separated by DGPs, or aggregated together in files `{method_name}_coverage.csv` and `{method_name}_distance.csv`.
-
-## Interval lengths
-[Here](https://unilj-my.sharepoint.com/:f:/g/personal/uz2273_student_uni-lj_si/EskVr9ueqDpKmaN6ndIcNe4Btl-c42KBz89LaLebzJfcxQ?e=bcJ2p7) are the plots of legths of confidence intervals for different parameters and distributions.
